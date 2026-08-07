@@ -1,0 +1,22 @@
+[package]
+name = "kchat-drive-demo"
+description = "Web demo of KChat Drive SDK with backend server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "kchat-drive-demo"
+path = "src/main.rs"
+
+[dependencies]
+kchat-drive-types = { workspace = true }
+kchat-drive-crypto = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+hex = { workspace = true }
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }
+sha2 = { workspace = true }
+minicbor = { workspace = true, features = ["derive", "alloc"] }

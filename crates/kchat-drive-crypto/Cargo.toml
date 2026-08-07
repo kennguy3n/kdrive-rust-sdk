@@ -1,0 +1,29 @@
+[package]
+name = "kchat-drive-crypto"
+description = "KDRV1 crypto: chunk AEAD, manifest encrypt/sign, HPKE envelopes, DomainKey chain, ShareGrantKey."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+kchat-drive-types = { workspace = true }
+minicbor = { workspace = true, features = ["derive", "alloc"] }
+sha2 = { workspace = true }
+hkdf = { workspace = true }
+aes-gcm = { workspace = true }
+rand = { workspace = true }
+hpke = { workspace = true }
+ed25519-dalek = { workspace = true }
+ed25519 = { workspace = true }
+zeroize = { workspace = true }
+thiserror = { workspace = true }
+hex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]

@@ -1,0 +1,41 @@
+# Rust
+/target/
+**/target/
+Cargo.lock.bak
+*.rs.bk
+
+# WASM build artifacts
+**/pkg/
+**/*.wasm.tmp
+
+# UniFFI generated bindings
+**/*.kt.swift
+**/uniffi_generated/
+
+# napi-rs build artifacts
+**/*.node
+**/napi/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Web sample (Vite + React)
+web-sample/node_modules/
+web-sample/dist/
+web-sample/.vite/
+web-sample/*.local
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log

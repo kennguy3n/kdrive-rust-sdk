@@ -1,0 +1,27 @@
+[package]
+name = "kchat-drive-uniffi"
+description = "Swift + Kotlin UniFFI bindings for KChat Drive."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lib]
+crate-type = ["staticlib", "lib", "cdylib"]
+name = "kchat_drive_uniffi"
+
+[dependencies]
+kchat-drive-types = { workspace = true }
+kchat-drive-crypto = { workspace = true }
+kchat-drive-identity = { workspace = true }
+kchat-drive-mls-bridge = { workspace = true }
+kchat-client-runtime = { workspace = true }
+uniffi = { workspace = true }
+thiserror = { workspace = true }
+hex = { workspace = true }
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }

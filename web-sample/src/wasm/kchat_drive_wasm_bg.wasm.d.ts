@@ -1,0 +1,35 @@
+/* tslint:disable */
+/* eslint-disable */
+export const memory: WebAssembly.Memory;
+export const chunk_count: (a: bigint, b: bigint) => bigint;
+export const decrypt_file_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: bigint, l: number, m: number, n: number, o: number, p: number, q: number) => [number, number, number, number];
+export const decrypt_manifest_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
+export const encrypt_file_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: bigint, l: number, m: number, n: number, o: number) => [number, number, number];
+export const encrypt_manifest_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
+export const generate_domain_key_wasm: (a: number, b: number) => [number, number, number];
+export const generate_share_grant_key_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: number, i: number) => [number, number, number];
+export const generate_version_dek: () => [number, number];
+export const get_test_vectors_json: () => [number, number];
+export const rotate_domain_key_wasm: (a: number, b: number, c: number, d: number, e: bigint) => [number, number, number];
+export const select_chunk_size: (a: bigint) => bigint;
+export const sign_header_wasm: (a: number, b: number, c: number, d: number) => [number, number, number];
+export const unwrap_dek_from_domain_key: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+export const unwrap_dek_from_share_grant_key: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+export const verify_header_wasm: (a: number, b: number, c: number, d: number) => [number, number, number];
+export const wrap_dek_under_domain_key: (a: number, b: number, c: number, d: number) => [number, number, number];
+export const wrap_dek_under_share_grant_key: (a: number, b: number, c: number, d: number) => [number, number, number];
+export const __wbg_wasmdriveruntime_free: (a: number, b: number) => void;
+export const generate_ed25519_keypair: () => [number, number, number];
+export const generate_hpke_keypair: () => [number, number, number];
+export const random_id_hex: () => [number, number];
+export const sha256_hex: (a: number, b: number) => [number, number];
+export const wasmdriveruntime_create_domain: (a: number, b: number, c: number) => [number, number, number, number];
+export const wasmdriveruntime_new: () => number;
+export const __wbindgen_exn_store: (a: number) => void;
+export const __externref_table_alloc: () => number;
+export const __wbindgen_externrefs: WebAssembly.Table;
+export const __wbindgen_malloc: (a: number, b: number) => number;
+export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+export const __externref_table_dealloc: (a: number) => void;
+export const __wbindgen_free: (a: number, b: number, c: number) => void;
+export const __wbindgen_start: () => void;

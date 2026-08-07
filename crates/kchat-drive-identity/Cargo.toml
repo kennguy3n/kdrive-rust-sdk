@@ -1,0 +1,23 @@
+[package]
+name = "kchat-drive-identity"
+description = "Account authority, device certificates, per-device vault, enrollment for KChat Drive."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+kchat-drive-types = { workspace = true }
+ed25519-dalek = { workspace = true }
+ed25519 = { workspace = true }
+sha2 = { workspace = true }
+rand = { workspace = true }
+zeroize = { workspace = true }
+thiserror = { workspace = true }
+minicbor = { workspace = true, features = ["derive", "alloc"] }
+hex = { workspace = true }
+aes-gcm = { workspace = true }

@@ -1,0 +1,27 @@
+[package]
+name = "kchat-client-runtime"
+description = "Sole owner of MLS provider + Drive vault + journal + epoch barrier for KChat Drive."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+kchat-drive-types = { workspace = true }
+kchat-drive-crypto = { workspace = true }
+kchat-drive-identity = { workspace = true }
+kchat-drive-mls-bridge = { workspace = true }
+kchat-drive-sync-core = { workspace = true }
+kchat-drive-transport-core = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+minicbor = { workspace = true, features = ["derive", "alloc"] }
+sha2 = { workspace = true }
+ed25519-dalek = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true }

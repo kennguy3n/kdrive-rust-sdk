@@ -1,0 +1,29 @@
+[package]
+name = "kchat-drive-napi"
+description = "Electron native addon (NAPI-RS) for KChat Drive."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+kchat-drive-types = { workspace = true }
+kchat-drive-crypto = { workspace = true }
+kchat-drive-identity = { workspace = true }
+kchat-drive-mls-bridge = { workspace = true }
+kchat-client-runtime = { workspace = true }
+napi = { workspace = true }
+napi-derive = { workspace = true }
+hex = { workspace = true }
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }
+
+[build-dependencies]
+napi-build = { workspace = true }

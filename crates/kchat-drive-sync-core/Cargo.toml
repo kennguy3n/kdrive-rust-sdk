@@ -1,0 +1,17 @@
+[package]
+name = "kchat-drive-sync-core"
+description = "Target-neutral state machines, operation journal, scheduling, conflicts for KChat Drive."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+kchat-drive-types = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+minicbor = { workspace = true, features = ["derive", "alloc"] }

@@ -1,0 +1,93 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/kchat-drive-types",
+    "crates/kchat-drive-crypto",
+    "crates/kchat-drive-identity",
+    "crates/kchat-drive-mls-bridge",
+    "crates/kchat-drive-sync-core",
+    "crates/kchat-client-runtime",
+    "crates/kchat-drive-store-sqlite",
+    "crates/kchat-drive-store-idb",
+    "crates/kchat-drive-transport-core",
+    "crates/kchat-drive-transport-native",
+    "crates/kchat-drive-transport-web",
+    "crates/kchat-drive-wasm",
+    "crates/kchat-drive-uniffi",
+    "crates/kchat-drive-napi",
+    "crates/kchat-drive-demo",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["KChat Authors"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/KChatGlobal/kdrive-rust-sdk"
+homepage = "https://kchat.com"
+keywords = ["drive", "e2ee", "mls", "crypto", "storage"]
+categories = ["cryptography", "api-bindings"]
+
+[workspace.dependencies]
+# Internal crates
+kchat-drive-types = { path = "crates/kchat-drive-types" }
+kchat-drive-crypto = { path = "crates/kchat-drive-crypto" }
+kchat-drive-identity = { path = "crates/kchat-drive-identity" }
+kchat-drive-mls-bridge = { path = "crates/kchat-drive-mls-bridge" }
+kchat-drive-sync-core = { path = "crates/kchat-drive-sync-core" }
+kchat-client-runtime = { path = "crates/kchat-client-runtime" }
+kchat-drive-store-sqlite = { path = "crates/kchat-drive-store-sqlite" }
+kchat-drive-store-idb = { path = "crates/kchat-drive-store-idb" }
+kchat-drive-transport-core = { path = "crates/kchat-drive-transport-core" }
+kchat-drive-transport-native = { path = "crates/kchat-drive-transport-native" }
+kchat-drive-transport-web = { path = "crates/kchat-drive-transport-web" }
+
+# kchat-rust-sdk crates (path deps to sibling repo)
+uq-openmls = { path = "../kchat-rust-sdk/crates/uq-openmls" }
+
+# openmls (path dep to sibling repo)
+openmls = { path = "../openmls/openmls" }
+openmls_traits = { path = "../openmls/traits" }
+openmls_rust_crypto = { path = "../openmls/openmls_rust_crypto" }
+openmls_basic_credential = { path = "../openmls/basic_credential" }
+
+# Common deps
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+secrecy = "0.10.3"
+minicbor = { version = "0.24", features = ["derive", "alloc"] }
+sha2 = "0.10"
+hkdf = "0.12"
+aes-gcm = "0.10"
+rand = "0.8"
+uuid = { version = "1", features = ["v4"] }
+hex = "0.4"
+zeroize = { version = "1", features = ["derive"] }
+ed25519-dalek = { version = "2", features = ["rand_core", "zeroize"] }
+ed25519 = "2"
+hpke = { version = "0.12", features = ["x25519"] }
+
+# Native-only deps
+tokio = { version = "1", features = ["full"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+refinery = { version = "0.9", features = ["rusqlite", "enums"] }
+
+# WASM-only deps
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["IdbDatabase", "IdbObjectStore", "IdbTransaction", "IdbRequest", "IdbOpenDbRequest", "IdbFactory", "IdbKeyRange", "IdbCursor", "IdbCursorWithValue", "Window", "Request", "RequestInit", "Response", "Headers", "ReadableStream", "WorkerGlobalScope"] }
+js-sys = "0.3"
+getrandom = { version = "0.2", features = ["js"] }
+
+# Bindings
+uniffi = { version = "0.31", features = ["cli", "tokio"] }
+napi = { version = "3.0.0", features = ["napi6"] }
+napi-derive = "3.0.0"
+napi-build = "2"
+
+[patch.crates-io]
+openmls = { path = "../openmls/openmls" }
+openmls_basic_credential = { path = "../openmls/basic_credential" }
+openmls_traits = { path = "../openmls/traits" }
+openmls_rust_crypto = { path = "../openmls/openmls_rust_crypto" }

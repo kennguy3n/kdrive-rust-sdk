@@ -1,0 +1,40 @@
+[package]
+name = "kchat-drive-wasm"
+description = "WASM binding for KChat Drive (browser streaming crypto + protocol)."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+kchat-drive-types = { workspace = true }
+kchat-drive-crypto = { workspace = true }
+kchat-drive-identity = { workspace = true }
+kchat-drive-mls-bridge = { workspace = true }
+kchat-client-runtime = { workspace = true }
+kchat-drive-transport-web = { workspace = true }
+kchat-drive-store-idb = { workspace = true }
+wasm-bindgen = { workspace = true }
+js-sys = { workspace = true }
+web-sys = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+minicbor = { workspace = true, features = ["derive", "alloc"] }
+sha2 = { workspace = true }
+hex = { workspace = true }
+thiserror = { workspace = true }
+getrandom = { workspace = true }
+rand = { workspace = true }
+ed25519-dalek = { workspace = true }
+openmls = { workspace = true }
+
+[features]
+default = []
+mls-js = ["openmls/js"]

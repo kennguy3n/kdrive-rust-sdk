@@ -1,0 +1,17 @@
+[package]
+name = "kchat-drive-transport-native"
+description = "Desktop/mobile transport traits for KChat Drive."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+kchat-drive-types = { workspace = true }
+kchat-drive-transport-core = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
