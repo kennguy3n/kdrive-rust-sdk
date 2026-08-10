@@ -11,10 +11,11 @@ Cargo.lock.bak
 # UniFFI generated bindings
 **/*.kt.swift
 **/uniffi_generated/
+bindings/
 
 # napi-rs build artifacts
 **/*.node
-**/napi/dist/
+crates/kchat-drive-napi/dist/
 
 # OS
 .DS_Store
