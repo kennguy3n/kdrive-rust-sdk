@@ -1,0 +1,18 @@
+#!/bin/sh
+export JAVA_HOME="/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
+export ANDROID_HOME="/opt/homebrew/share/android-commandlinetools"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+DIR="$(cd "$(dirname "$0")" && pwd)"
+APP_NAME="Gradle"
+if [ -n "$JAVA_HOME" ] ; then
+    JAVACMD="$JAVA_HOME/bin/java"
+else
+    JAVACMD="java"
+fi
+# Download wrapper jar if not present
+WRAPPERS_DIR="$DIR/gradle/wrapper"
+if [ ! -f "$WRAPPERS_DIR/gradle-wrapper.jar" ]; then
+    echo "Downloading gradle-wrapper.jar..."
+    curl -sL "https://raw.githubusercontent.com/gradle/gradle/v8.10.2/gradle/wrapper/gradle-wrapper.jar" -o "$WRAPPERS_DIR/gradle-wrapper.jar"
+fi
+exec "$JAVACMD" -classpath "$WRAPPERS_DIR/gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain "$@"

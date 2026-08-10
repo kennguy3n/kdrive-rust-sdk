@@ -1,0 +1,18 @@
+{
+  "name": "kchat-drive-napi",
+  "version": "0.1.0",
+  "description": "Electron native addon (NAPI-RS) for KChat Drive.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "napi": {
+    "name": "kchat-drive",
+    "triples": {
+      "defaults": false,
+      "additional": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin"
+      ]
+    }
+  },
+  "license": "MIT OR Apache-2.0"
+}

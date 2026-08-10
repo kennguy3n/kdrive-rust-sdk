@@ -1,0 +1,49 @@
+name: KchatDriveIOS
+options:
+  bundleIdPrefix: ai.kchat.drive
+  deploymentTarget:
+    iOS: "16.0"
+  developmentLanguage: en
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    PRODUCT_BUNDLE_IDENTIFIER: ai.kchat.drive.ios-sample
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    GENERATE_INFOPLIST_FILE: YES
+    INFOPLIST_KEY_UILaunchScreen_Generation: YES
+    INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
+    INFOPLIST_KEY_UIRequiresFullScreen: NO
+    SWIFT_EMIT_LOC_STRINGS: YES
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+
+targets:
+  KchatDriveIOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: KchatDriveIOS
+        excludes:
+          - "FFI/**"
+      - path: KchatDriveIOS/FFI
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        HEADER_SEARCH_PATHS:
+          - "$(SRCROOT)/KchatDriveIOS/FFI"
+        OTHER_LDFLAGS:
+          - -lkchat_drive_uniffi
+          - -framework
+          - Foundation
+          - -framework
+          - Security
+        LIBRARY_SEARCH_PATHS:
+          - "$(SRCROOT)/../../../target/aarch64-apple-ios-sim/debug"
+          - "$(SRCROOT)/../../../target/aarch64-apple-ios/release"
+        SWIFT_INCLUDE_PATHS:
+          - "$(SRCROOT)/KchatDriveIOS/FFI"
+        SYSTEM_HEADER_SEARCH_PATHS:
+          - "$(SRCROOT)/KchatDriveIOS/FFI"

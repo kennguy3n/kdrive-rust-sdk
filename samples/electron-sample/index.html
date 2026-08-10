@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
+  />
+  <title>KChat Drive — Electron Sample</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      max-width: 720px;
+      margin: 40px auto;
+      padding: 0 20px;
+      color: #1a1a1a;
+      background: #f5f5f5;
+    }
+    h1 {
+      font-size: 22px;
+      margin-bottom: 4px;
+    }
+    .subtitle {
+      color: #666;
+      font-size: 13px;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .card h2 {
+      font-size: 15px;
+      margin: 0 0 12px;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    input[type="text"] {
+      flex: 1;
+      padding: 6px 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      background: #2563eb;
+      color: #fff;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    button:hover {
+      background: #1d4ed8;
+    }
+    button:disabled {
+      background: #999;
+      cursor: default;
+    }
+    pre {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 12px;
+      border-radius: 4px;
+      font-size: 11px;
+      overflow-x: auto;
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .status {
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      display: inline-block;
+    }
+    .status.ok {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    .status.fail {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    .status.pending {
+      background: #fef3c7;
+      color: #92400e;
+    }
+    label {
+      font-size: 12px;
+      color: #555;
+      width: 140px;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>KChat Drive — Electron Sample</h1>
+  <p class="subtitle">
+    Demonstrates the NAPI-RS native addon (Rust crypto core) loaded inside
+    Electron. All encryption happens in the native addon — no plaintext
+    leaves the process.
+  </p>
+
+  <div class="card">
+    <h2>1. Key Generation</h2>
+    <div class="row">
+      <button id="btn-dek">Generate Version DEK</button>
+      <span id="dek-status" class="status pending">not generated</span>
+    </div>
+    <div class="row">
+      <button id="btn-ed25519">Generate Ed25519 Keypair</button>
+      <span id="ed-status" class="status pending">not generated</span>
+    </div>
+    <div class="row">
+      <button id="btn-hpke">Generate HPKE Keypair</button>
+      <span id="hpke-status" class="status pending">not generated</span>
+    </div>
+    <pre id="key-output">Click a button to generate keys…</pre>
+  </div>
+
+  <div class="card">
+    <h2>2. Encrypt / Decrypt Round-Trip</h2>
+    <div class="row">
+      <label>Plaintext (UTF-8):</label>
+      <input type="text" id="plaintext" value="Hello from Electron + NAPI-RS!" />
+    </div>
+    <div class="row">
+      <button id="btn-encrypt">Encrypt + Decrypt</button>
+      <span id="roundtrip-status" class="status pending">not run</span>
+    </div>
+    <pre id="roundtrip-output">Click "Encrypt + Decrypt" to run the full KDRV1 pipeline…</pre>
+  </div>
+
+  <div class="card">
+    <h2>3. Cross-Language Test Vectors</h2>
+    <div class="row">
+      <button id="btn-vectors">Fetch Vectors</button>
+      <span id="vectors-status" class="status pending">not fetched</span>
+    </div>
+    <pre id="vectors-output">Click "Fetch Vectors" to get the KDRV1 test vectors from the Rust SDK…</pre>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    async function setStatus(id, ok, text) {
+      const el = $(id);
+      el.textContent = text;
+      el.className = "status " + (ok ? "ok" : "fail");
+    }
+
+    // --- Key Generation ---
+
+    $("btn-dek").addEventListener("click", async () => {
+      const dek = await window.kdrive.generateVersionDek();
+      $("key-output").textContent = "Version DEK: " + dek + "\n";
+      setStatus("dek-status", true, "OK (" + dek.slice(0, 8) + "…)");
+    });
+
+    $("btn-ed25519").addEventListener("click", async () => {
+      const kp = await window.kdrive.generateEd25519Keypair();
+      $("key-output").textContent +=
+        "Ed25519 priv: " + kp.privateKeyHex + "\n" +
+        "Ed25519 pub:  " + kp.publicKeyHex + "\n";
+      setStatus("ed-status", true, "OK");
+    });
+
+    $("btn-hpke").addEventListener("click", async () => {
+      const kp = await window.kdrive.generateHpkeKeypair();
+      $("key-output").textContent +=
+        "HPKE (X25519) priv: " + kp.privateKeyHex + "\n" +
+        "HPKE (X25519) pub:  " + kp.publicKeyHex + "\n";
+      setStatus("hpke-status", true, "OK");
+    });
+
+    // --- Encrypt / Decrypt Round-Trip ---
+
+    $("btn-encrypt").addEventListener("click", async () => {
+      try {
+        setStatus("roundtrip-status", false, "running…");
+        const plaintext = $("plaintext").value;
+        const plaintextHex = Array.from(new TextEncoder().encode(plaintext))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
+
+        const dek = await window.kdrive.generateVersionDek();
+        const nodeId = await window.kdrive.randomIdHex();
+        const versionId = await window.kdrive.randomIdHex();
+        const driveId = await window.kdrive.randomIdHex();
+        const domainId = await window.kdrive.randomIdHex();
+        const snapshotHash = "00".repeat(32);
+
+        const enc = await window.kdrive.encryptFile(
+          dek, nodeId, versionId, driveId, domainId,
+          1, snapshotHash, plaintextHex,
+        );
+
+        const decryptedHex = await window.kdrive.decryptFile(
+          dek, nodeId, versionId, driveId, domainId,
+          1, snapshotHash,
+          enc.manifestCiphertextHex, enc.manifestNonceHex,
+          enc.ciphertextsHex,
+        );
+
+        const decrypted = new TextDecoder().decode(
+          new Uint8Array(decryptedHex.match(/.{2}/g).map((h) => parseInt(h, 16))),
+        );
+
+        const ok = decrypted === plaintext;
+        $("roundtrip-output").textContent =
+          "Version DEK:  " + dek.slice(0, 32) + "…\n" +
+          "Node ID:      " + nodeId + "\n" +
+          "Version ID:   " + versionId + "\n" +
+          "Chunk root:   " + enc.chunkPlanRootHex + "\n" +
+          "Chunk count:  " + enc.chunkCount + "\n" +
+          "Manifest CT:  " + enc.manifestCiphertextHex.slice(0, 32) + "…\n" +
+          "Ciphertexts:  " + enc.ciphertextsHex.length + " chunk(s)\n" +
+          "Decrypted:    " + decrypted + "\n" +
+          "Match:        " + (ok ? "YES" : "NO");
+        setStatus("roundtrip-status", ok, ok ? "PASS" : "FAIL");
+      } catch (err) {
+        $("roundtrip-output").textContent = String(err);
+        setStatus("roundtrip-status", false, "ERROR");
+      }
+    });
+
+    // --- Test Vectors ---
+
+    $("btn-vectors").addEventListener("click", async () => {
+      const v = await window.kdrive.getTestVectors();
+      const parsed = JSON.parse(v);
+      $("vectors-output").textContent = JSON.stringify(parsed, null, 2);
+      setStatus("vectors-status", true, "OK (protocol=" + parsed.protocol + ")");
+    });
+  </script>
+</body>
+</html>

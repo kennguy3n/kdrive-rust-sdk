@@ -1,0 +1,19 @@
+{
+  "name": "kchat-drive-electron-sample",
+  "version": "0.1.0",
+  "description": "Electron sample app using the KChat Drive NAPI-RS addon.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "echo 'NAPI addon is prebuilt in ../../crates/kchat-drive-napi/dist'"
+  },
+  "dependencies": {
+    "kchat-drive-napi": "file:../../crates/kchat-drive-napi"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11"
+  },
+  "allowScripts": {
+    "electron@33.4.11": true
+  }
+}
