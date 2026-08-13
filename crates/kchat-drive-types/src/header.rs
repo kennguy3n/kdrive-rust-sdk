@@ -82,6 +82,11 @@ pub struct PublicVersionHeader {
     /// Ed25519 signature over the canonical header (excluding this field).
     #[n(18)]
     pub signature: Option<Ed25519Signature>,
+
+    /// KDRV1: content ID for dedup (HMAC of plaintext hash with tenant pepper).
+    /// None for KDRV1 headers.
+    #[n(19)]
+    pub content_id: Option<Hash256>,
 }
 
 impl PublicVersionHeader {
@@ -150,7 +155,7 @@ impl ChunkPlan {
             .iter()
             .map(|c| {
                 let mut hasher = Sha256::new();
-                hasher.update(b"kchat-drive/chunk-plan-leaf/v1");
+                hasher.update(crate::CHUNK_PLAN_LEAF_TAG);
                 hasher.update(c.index.to_be_bytes());
                 hasher.update(c.plaintext_len.to_be_bytes());
                 hasher.update(c.ciphertext_sha256.as_bytes());
@@ -169,7 +174,7 @@ impl ChunkPlan {
             let mut next = Vec::with_capacity(leaves.len().div_ceil(2));
             for pair in leaves.chunks(2) {
                 let mut hasher = Sha256::new();
-                hasher.update(b"kchat-drive/chunk-plan-node/v1");
+                hasher.update(crate::CHUNK_PLAN_NODE_TAG);
                 hasher.update(pair[0]);
                 if pair.len() == 2 {
                     hasher.update(pair[1]);

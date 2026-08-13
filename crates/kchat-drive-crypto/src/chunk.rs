@@ -4,9 +4,7 @@ use aes_gcm::{
 };
 use sha2::{Digest, Sha256};
 
-use kchat_drive_types::{
-    ChunkDescriptor, ChunkPlan, DomainId, Hash256, NodeId, VersionId,
-};
+use kchat_drive_types::{ChunkDescriptor, ChunkPlan, DomainId, Hash256, NodeId, VersionId};
 
 use crate::kdf::{
     chunk_count, derive_chunk_key, derive_chunk_nonce, extract_prk, select_chunk_size,

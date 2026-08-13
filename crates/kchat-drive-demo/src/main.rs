@@ -6,8 +6,8 @@ use kchat_drive_crypto::{
     select_chunk_size, sign_header, verify_header,
 };
 use kchat_drive_types::{
-    DomainId, DriveId, Ed25519PublicKey, Hash256, NodeId, Nonce12, PrivacyMode, PublicVersionHeader,
-    VersionId, PROTOCOL_VERSION, SUITE_KDRV1,
+    DomainId, DriveId, Ed25519PublicKey, Hash256, NodeId, Nonce12, PROTOCOL_VERSION, PrivacyMode,
+    PublicVersionHeader, SUITE_KDRV1, VersionId,
 };
 
 mod html;
@@ -15,7 +15,10 @@ mod html;
 fn main() {
     let port = 3000;
     let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).expect("bind failed");
-    println!("KChat Drive demo server running at http://127.0.0.1:{}", port);
+    println!(
+        "KChat Drive demo server running at http://127.0.0.1:{}",
+        port
+    );
     println!("Open this URL in your browser to try the encrypt/decrypt demo.\n");
 
     for stream in listener.incoming() {
@@ -47,11 +50,18 @@ fn handle_request(stream: &mut std::net::TcpStream) {
     let method = parts[0];
     let path = parts[1];
 
-    let body_start = request.find("\r\n\r\n").map(|i| i + 4).unwrap_or(request.len());
+    let body_start = request
+        .find("\r\n\r\n")
+        .map(|i| i + 4)
+        .unwrap_or(request.len());
     let body = &request[body_start..];
 
     let (status, content_type, response_body) = match (method, path) {
-        ("GET", "/") => (200, "text/html; charset=utf-8", html::INDEX_HTML.to_string()),
+        ("GET", "/") => (
+            200,
+            "text/html; charset=utf-8",
+            html::INDEX_HTML.to_string(),
+        ),
         ("GET", "/api/health") => (
             200,
             "application/json",
@@ -117,17 +127,11 @@ fn handle_encrypt(body: &str) -> Result<String, String> {
     let req: serde_json::Value =
         serde_json::from_str(body).map_err(|e| format!("invalid JSON: {}", e))?;
 
-    let version_dek_hex = req["version_dek"]
-        .as_str()
-        .ok_or("missing version_dek")?;
+    let version_dek_hex = req["version_dek"].as_str().ok_or("missing version_dek")?;
     let node_id_hex = req["node_id"].as_str().ok_or("missing node_id")?;
-    let version_id_hex = req["version_id"]
-        .as_str()
-        .ok_or("missing version_id")?;
+    let version_id_hex = req["version_id"].as_str().ok_or("missing version_id")?;
     let drive_id_hex = req["drive_id"].as_str().ok_or("missing drive_id")?;
-    let domain_id_hex = req["domain_id"]
-        .as_str()
-        .ok_or("missing domain_id")?;
+    let domain_id_hex = req["domain_id"].as_str().ok_or("missing domain_id")?;
     let access_context_revision = req["access_context_revision"]
         .as_u64()
         .ok_or("missing access_context_revision")?;
@@ -138,7 +142,8 @@ fn handle_encrypt(body: &str) -> Result<String, String> {
         .as_str()
         .ok_or("missing plaintext_base64")?;
 
-    let version_dek = hex::decode(version_dek_hex).map_err(|e| format!("invalid version_dek: {}", e))?;
+    let version_dek =
+        hex::decode(version_dek_hex).map_err(|e| format!("invalid version_dek: {}", e))?;
     let version_dek: [u8; 32] = version_dek
         .as_slice()
         .try_into()
@@ -152,8 +157,8 @@ fn handle_encrypt(body: &str) -> Result<String, String> {
         .try_into()
         .map_err(|_| "drive_id must be 16 bytes")?;
     let domain_id = DomainId::from_hex(domain_id_hex).map_err(|e| e.to_string())?;
-    let snapshot_hash = hex::decode(snapshot_hash_hex)
-        .map_err(|e| format!("invalid snapshot_hash: {}", e))?;
+    let snapshot_hash =
+        hex::decode(snapshot_hash_hex).map_err(|e| format!("invalid snapshot_hash: {}", e))?;
     let snapshot_hash: [u8; 32] = snapshot_hash
         .as_slice()
         .try_into()
@@ -161,18 +166,17 @@ fn handle_encrypt(body: &str) -> Result<String, String> {
 
     let plaintext = base64_decode(plaintext_b64)?;
 
-    let (chunk_plan, ciphertexts) =
-        encrypt_file(
-            &version_dek,
-            &node_id,
-            &version_id,
-            &drive_id,
-            &domain_id,
-            access_context_revision,
-            &snapshot_hash,
-            &plaintext,
-        )
-        .map_err(|e| e.to_string())?;
+    let (chunk_plan, ciphertexts) = encrypt_file(
+        &version_dek,
+        &node_id,
+        &version_id,
+        &drive_id,
+        &domain_id,
+        access_context_revision,
+        &snapshot_hash,
+        &plaintext,
+    )
+    .map_err(|e| e.to_string())?;
 
     let root = chunk_plan.merkle_root();
 
@@ -188,10 +192,14 @@ fn handle_encrypt(body: &str) -> Result<String, String> {
             .unwrap_or_default()
             .as_secs(),
         parent_version_id: None,
+        content_id: None,
+        wrapped_content_key: None,
+        content_wrap_nonce: None,
     };
 
     let (manifest_ct, manifest_nonce) =
-        encrypt_manifest(&version_dek, &node_id, &version_id, &manifest).map_err(|e| e.to_string())?;
+        encrypt_manifest(&version_dek, &node_id, &version_id, &manifest)
+            .map_err(|e| e.to_string())?;
 
     let manifest_sha = kchat_drive_crypto::sha256(&manifest_ct);
 
@@ -218,6 +226,7 @@ fn handle_encrypt(body: &str) -> Result<String, String> {
             .unwrap_or_default()
             .as_secs(),
         signature: None,
+        content_id: None,
     };
 
     let mut header_buf = Vec::new();
@@ -250,17 +259,11 @@ fn handle_decrypt(body: &str) -> Result<String, String> {
     let req: serde_json::Value =
         serde_json::from_str(body).map_err(|e| format!("invalid JSON: {}", e))?;
 
-    let version_dek_hex = req["version_dek"]
-        .as_str()
-        .ok_or("missing version_dek")?;
+    let version_dek_hex = req["version_dek"].as_str().ok_or("missing version_dek")?;
     let node_id_hex = req["node_id"].as_str().ok_or("missing node_id")?;
-    let version_id_hex = req["version_id"]
-        .as_str()
-        .ok_or("missing version_id")?;
+    let version_id_hex = req["version_id"].as_str().ok_or("missing version_id")?;
     let drive_id_hex = req["drive_id"].as_str().ok_or("missing drive_id")?;
-    let domain_id_hex = req["domain_id"]
-        .as_str()
-        .ok_or("missing domain_id")?;
+    let domain_id_hex = req["domain_id"].as_str().ok_or("missing domain_id")?;
     let access_context_revision = req["access_context_revision"]
         .as_u64()
         .ok_or("missing access_context_revision")?;
@@ -277,7 +280,8 @@ fn handle_decrypt(body: &str) -> Result<String, String> {
         .as_array()
         .ok_or("missing ciphertexts_hex array")?;
 
-    let version_dek = hex::decode(version_dek_hex).map_err(|e| format!("invalid version_dek: {}", e))?;
+    let version_dek =
+        hex::decode(version_dek_hex).map_err(|e| format!("invalid version_dek: {}", e))?;
     let version_dek: [u8; 32] = version_dek
         .as_slice()
         .try_into()
@@ -291,8 +295,8 @@ fn handle_decrypt(body: &str) -> Result<String, String> {
         .try_into()
         .map_err(|_| "drive_id must be 16 bytes")?;
     let domain_id = DomainId::from_hex(domain_id_hex).map_err(|e| e.to_string())?;
-    let snapshot_hash = hex::decode(snapshot_hash_hex)
-        .map_err(|e| format!("invalid snapshot_hash: {}", e))?;
+    let snapshot_hash =
+        hex::decode(snapshot_hash_hex).map_err(|e| format!("invalid snapshot_hash: {}", e))?;
     let snapshot_hash: [u8; 32] = snapshot_hash
         .as_slice()
         .try_into()
@@ -403,8 +407,7 @@ fn handle_verify_header(body: &str) -> Result<String, String> {
 
     let header_bytes =
         hex::decode(header_cbor_hex).map_err(|e| format!("invalid header_cbor: {}", e))?;
-    let header: PublicVersionHeader =
-        minicbor::decode(&header_bytes).map_err(|e| e.to_string())?;
+    let header: PublicVersionHeader = minicbor::decode(&header_bytes).map_err(|e| e.to_string())?;
 
     let verifying_key_bytes =
         hex::decode(verifying_key_hex).map_err(|e| format!("invalid verifying_key: {}", e))?;

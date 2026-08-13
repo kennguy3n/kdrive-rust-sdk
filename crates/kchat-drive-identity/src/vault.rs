@@ -2,6 +2,7 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
     aead::{Aead, KeyInit, Payload},
 };
+use rand::RngCore;
 use zeroize::Zeroize;
 
 use kchat_drive_types::DriveError;
@@ -25,7 +26,6 @@ struct VaultEntry {
 impl DriveKeyVault {
     /// Creates a new vault with a random master key.
     pub fn new() -> Self {
-        use rand::RngCore;
         let mut master_key = [0u8; 32];
         rand::rngs::OsRng.fill_bytes(&mut master_key);
         Self {
@@ -42,13 +42,18 @@ impl DriveKeyVault {
         }
     }
 
+    /// Returns the vault's master key (for JS to persist across sessions).
+    /// In production, JS should store this securely (e.g. WebCrypto + IndexedDB).
+    pub fn master_key(&self) -> &[u8; 32] {
+        &self.master_key
+    }
+
     /// Stores a key in the vault, encrypted under the master key.
     pub fn store(&mut self, key_id: &str, key: &[u8; 32]) -> Result<(), DriveError> {
         let cipher = Aes256Gcm::new_from_slice(&self.master_key)
             .map_err(|e| DriveError::Crypto(e.to_string()))?;
 
         let mut nonce_bytes = [0u8; 12];
-        use rand::RngCore;
         rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
 
@@ -82,7 +87,7 @@ impl DriveKeyVault {
         let nonce = Nonce::from_slice(&entry.nonce);
 
         let aad = b"kchat-drive/vault/v1";
-        let plaintext = cipher
+        let mut plaintext = cipher
             .decrypt(
                 nonce,
                 Payload {
@@ -93,14 +98,17 @@ impl DriveKeyVault {
             .map_err(|e| DriveError::Crypto(e.to_string()))?;
 
         if plaintext.len() != 32 {
+            let len = plaintext.len();
+            zeroize::Zeroize::zeroize(&mut plaintext);
             return Err(DriveError::Crypto(format!(
                 "expected 32-byte key, got {}",
-                plaintext.len()
+                len
             )));
         }
 
         let mut key = [0u8; 32];
         key.copy_from_slice(&plaintext);
+        zeroize::Zeroize::zeroize(&mut plaintext);
         Ok(key)
     }
 
@@ -110,7 +118,6 @@ impl DriveKeyVault {
             .map_err(|e| DriveError::Crypto(e.to_string()))?;
 
         let mut nonce_bytes = [0u8; 12];
-        use rand::RngCore;
         rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
 
@@ -130,7 +137,7 @@ impl DriveKeyVault {
     }
 
     /// Retrieves arbitrary bytes from the vault.
-    pub fn load_bytes(&self, key_id: &str) -> Result<Vec<u8>, DriveError> {
+    pub fn load_bytes(&self, key_id: &str) -> Result<zeroize::Zeroizing<Vec<u8>>, DriveError> {
         let entry = self
             .entries
             .get(key_id)
@@ -154,7 +161,7 @@ impl DriveKeyVault {
             )
             .map_err(|e| DriveError::Crypto(e.to_string()))?;
 
-        Ok(plaintext)
+        Ok(zeroize::Zeroizing::new(plaintext))
     }
 
     /// Removes a key from the vault.

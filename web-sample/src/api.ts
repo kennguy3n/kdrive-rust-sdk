@@ -2,6 +2,33 @@ import type { Tenant, Folder, Node } from "./types";
 
 const API_BASE = "";
 
+/**
+ * Format an error from the WASM SDK or fetch API into a human-readable string.
+ * WASM SDK errors are now structured objects with `code` and `message` fields.
+ * Legacy string errors and Error instances are also handled.
+ */
+export function formatError(err: unknown): string {
+  if (err === null || err === undefined) return "unknown error";
+  if (typeof err === "string") return err;
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null) {
+    const e = err as { code?: string; message?: string };
+    if (e.code && e.message) return `[${e.code}] ${e.message}`;
+    if (e.message) return e.message;
+    if (e.code) return e.code;
+  }
+  return String(err);
+}
+
+/** Get the error code from a structured WASM SDK error. */
+export function errorCode(err: unknown): string {
+  if (typeof err === "object" && err !== null) {
+    const e = err as { code?: string };
+    if (e.code) return e.code;
+  }
+  return "Unknown";
+}
+
 function headers(tenantId?: string, userId?: string): Record<string, string> {
   const h: Record<string, string> = { "Content-Type": "application/json" };
   if (tenantId) h["X-Demo-Tenant"] = tenantId;
@@ -184,4 +211,82 @@ export async function listShares(
   if (!res.ok) throw new Error(`listShares: ${res.status}`);
   const data = await res.json();
   return data.grants || [];
+}
+
+// ---- Dedup gateway endpoints (KDRV1) ----
+
+export async function checkContent(
+  tenantId: string,
+  contentIdHex: string,
+): Promise<{
+  exists: boolean;
+  blob_keys: string[];
+  ciphertext_hashes: string[];
+  chunk_count: number;
+  plaintext_size: number;
+}> {
+  const res = await fetch(`${API_BASE}/v1/content:check`, {
+    method: "POST",
+    headers: headers(tenantId),
+    body: JSON.stringify({ content_id: contentIdHex }),
+  });
+  if (!res.ok) throw new Error(`checkContent: ${res.status}`);
+  return res.json();
+}
+
+export async function checkChunks(
+  tenantId: string,
+  contentIdHex: string,
+  chunkHashes: string[],
+): Promise<{ results: { hash: string; exists: boolean; blob_key: string | null }[] }> {
+  const res = await fetch(`${API_BASE}/v1/content:checkChunks`, {
+    method: "POST",
+    headers: headers(tenantId),
+    body: JSON.stringify({ content_id: contentIdHex, chunk_hashes: chunkHashes }),
+  });
+  if (!res.ok) throw new Error(`checkChunks: ${res.status}`);
+  return res.json();
+}
+
+export async function registerContent(
+  tenantId: string,
+  body: {
+    content_id: string;
+    plaintext_size: number;
+    chunk_count: number;
+    chunk_size: number;
+    chunk_plan_root: string;
+    chunks: {
+      chunk_index: number;
+      chunk_content_hash: string;
+      blob_key: string;
+      plaintext_len: number;
+      ciphertext_len: number;
+    }[];
+  },
+): Promise<{ already_existed: boolean }> {
+  const res = await fetch(`${API_BASE}/v1/content:register`, {
+    method: "POST",
+    headers: headers(tenantId),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`registerContent: ${res.status}`);
+  return res.json();
+}
+
+export async function commitDedup(
+  tenantId: string,
+  body: {
+    content_id: string;
+    reused_blob_keys: string[];
+    new_blob_keys: string[];
+  },
+): Promise<{ version_id: string; committed: boolean; deduped_chunks: number; new_chunks: number }> {
+  const res = await fetch(`${API_BASE}/v1/uploads:commitDedup`, {
+    method: "POST",
+    headers: headers(tenantId),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`commitDedup: ${res.status}`);
+  return res.json();
 }

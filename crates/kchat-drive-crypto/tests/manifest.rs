@@ -25,6 +25,9 @@ fn manifest_encrypt_decrypt_roundtrip() {
         plaintext_size: 100,
         created_at: 1700000000,
         parent_version_id: None,
+        content_id: None,
+        wrapped_content_key: None,
+        content_wrap_nonce: None,
     };
 
     let (ct, nonce) = encrypt_manifest(&version_dek, &node_id, &version_id, &manifest).unwrap();
@@ -58,6 +61,7 @@ fn header_sign_and_verify() {
         creator_device_key: Ed25519PublicKey::new(verifying_key.to_bytes()),
         created_at: 1700000000,
         signature: None,
+        content_id: None,
     };
 
     let sig = sign_header(&header, &signing_key).unwrap();
@@ -98,6 +102,7 @@ fn header_tampered_signature_fails() {
         creator_device_key: Ed25519PublicKey::new(verifying_key.to_bytes()),
         created_at: 1700000000,
         signature: None,
+        content_id: None,
     };
 
     let sig = sign_header(&header, &signing_key).unwrap();

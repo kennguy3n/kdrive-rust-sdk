@@ -1,4 +1,3 @@
-
 #[derive(Debug, Default)]
 pub struct OrderedWriteSet {
     entries: Vec<WriteEntry>,

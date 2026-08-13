@@ -20,8 +20,11 @@ kchat-drive-crypto = { workspace = true }
 kchat-drive-identity = { workspace = true }
 kchat-drive-mls-bridge = { workspace = true }
 kchat-client-runtime = { workspace = true }
+kchat-drive-transport-core = { workspace = true }
 uniffi = { workspace = true }
 thiserror = { workspace = true }
 hex = { workspace = true }
 ed25519-dalek = { workspace = true }
 rand = { workspace = true }
+serde_json = { workspace = true }
+minicbor = { workspace = true, features = ["alloc"] }

@@ -1,6 +1,20 @@
 #![allow(clippy::needless_pass_by_value)]
 #![allow(clippy::too_many_arguments)]
+// Allow deprecated functions during the migration period from low-level
+// crypto bindings to the facade-based API. External callers should migrate
+// to DriveRuntime methods; these functions will be removed in a future release.
+#![allow(deprecated)]
 
+// Note: NAPI uses i64 (not u64) for all integer types because JS Number
+// cannot represent u64 directly. All actual values (revision numbers,
+// chunk counts, file sizes, epoch numbers) are well within i64 range.
+// The `as u64` cast is safe for all realistic inputs. Using u64 would
+// require BigInt on the JS side, which is less ergonomic for callers.
+
+mod error;
+mod runtime;
+
+use error::{invalid_input, to_napi_error};
 use napi::bindgen_prelude::Buffer;
 use napi_derive::napi;
 
@@ -73,6 +87,7 @@ pub fn chunk_count(file_size: i64, chunk_size: i64) -> i64 {
     kchat_drive_crypto::chunk_count(file_size as u64, chunk_size as u64) as i64
 }
 
+#[deprecated(since = "0.1.0", note = "Use DriveRuntime facade method instead")]
 #[napi]
 pub fn encrypt_file_napi(
     version_dek_hex: String,
@@ -85,24 +100,28 @@ pub fn encrypt_file_napi(
     plaintext: Buffer,
 ) -> Result<EncryptResult, napi::Error> {
     let version_dek = hex::decode(&version_dek_hex)
-        .map_err(|e| napi::Error::from_reason(format!("invalid version_dek: {}", e)))?;
-    let version_dek: [u8; 32] = version_dek.as_slice().try_into()
-        .map_err(|_| napi::Error::from_reason("version_dek must be 32 bytes"))?;
+        .map_err(|e| invalid_input(format!("invalid version_dek: {}", e)))?;
+    let version_dek: [u8; 32] = version_dek
+        .as_slice()
+        .try_into()
+        .map_err(|_| invalid_input("version_dek must be 32 bytes".to_string()))?;
 
-    let node_id = kchat_drive_types::NodeId::from_hex(&node_id_hex)
-        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-    let version_id = kchat_drive_types::VersionId::from_hex(&version_id_hex)
-        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+    let node_id = kchat_drive_types::NodeId::from_hex(&node_id_hex).map_err(to_napi_error)?;
+    let version_id =
+        kchat_drive_types::VersionId::from_hex(&version_id_hex).map_err(to_napi_error)?;
     let drive_id = hex::decode(&drive_id_hex)
-        .map_err(|e| napi::Error::from_reason(format!("invalid drive_id: {}", e)))?;
-    let drive_id: [u8; 16] = drive_id.as_slice().try_into()
-        .map_err(|_| napi::Error::from_reason("drive_id must be 16 bytes"))?;
-    let domain_id = kchat_drive_types::DomainId::from_hex(&domain_id_hex)
-        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        .map_err(|e| invalid_input(format!("invalid drive_id: {}", e)))?;
+    let drive_id: [u8; 16] = drive_id
+        .as_slice()
+        .try_into()
+        .map_err(|_| invalid_input("drive_id must be 16 bytes".to_string()))?;
+    let domain_id = kchat_drive_types::DomainId::from_hex(&domain_id_hex).map_err(to_napi_error)?;
     let snapshot_hash = hex::decode(&access_context_snapshot_hash_hex)
-        .map_err(|e| napi::Error::from_reason(format!("invalid snapshot_hash: {}", e)))?;
-    let snapshot_hash: [u8; 32] = snapshot_hash.as_slice().try_into()
-        .map_err(|_| napi::Error::from_reason("snapshot_hash must be 32 bytes"))?;
+        .map_err(|e| invalid_input(format!("invalid snapshot_hash: {}", e)))?;
+    let snapshot_hash: [u8; 32] = snapshot_hash
+        .as_slice()
+        .try_into()
+        .map_err(|_| invalid_input("snapshot_hash must be 32 bytes".to_string()))?;
 
     let (chunk_plan, ciphertexts) = kchat_drive_crypto::encrypt_file(
         &version_dek,
@@ -113,7 +132,8 @@ pub fn encrypt_file_napi(
         access_context_revision as u64,
         &snapshot_hash,
         &plaintext,
-    ).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+    )
+    .map_err(to_napi_error)?;
 
     let root = chunk_plan.merkle_root();
 
@@ -129,11 +149,14 @@ pub fn encrypt_file_napi(
             .unwrap_or_default()
             .as_secs(),
         parent_version_id: None,
+        content_id: None,
+        wrapped_content_key: None,
+        content_wrap_nonce: None,
     };
 
-    let (manifest_ct, manifest_nonce) = kchat_drive_crypto::encrypt_manifest(
-        &version_dek, &node_id, &version_id, &manifest,
-    ).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+    let (manifest_ct, manifest_nonce) =
+        kchat_drive_crypto::encrypt_manifest(&version_dek, &node_id, &version_id, &manifest)
+            .map_err(to_napi_error)?;
 
     Ok(EncryptResult {
         version_id_hex: version_id.to_hex(),
@@ -145,6 +168,7 @@ pub fn encrypt_file_napi(
     })
 }
 
+#[deprecated(since = "0.1.0", note = "Use DriveRuntime facade method instead")]
 #[napi]
 pub fn decrypt_file_napi(
     version_dek_hex: String,
@@ -159,40 +183,53 @@ pub fn decrypt_file_napi(
     ciphertexts_hex: Vec<String>,
 ) -> Result<Buffer, napi::Error> {
     let version_dek = hex::decode(&version_dek_hex)
-        .map_err(|e| napi::Error::from_reason(format!("invalid version_dek: {}", e)))?;
-    let version_dek: [u8; 32] = version_dek.as_slice().try_into()
-        .map_err(|_| napi::Error::from_reason("version_dek must be 32 bytes"))?;
+        .map_err(|e| invalid_input(format!("invalid version_dek: {}", e)))?;
+    let version_dek: [u8; 32] = version_dek
+        .as_slice()
+        .try_into()
+        .map_err(|_| invalid_input("version_dek must be 32 bytes".to_string()))?;
 
-    let node_id = kchat_drive_types::NodeId::from_hex(&node_id_hex)
-        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-    let version_id = kchat_drive_types::VersionId::from_hex(&version_id_hex)
-        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+    let node_id = kchat_drive_types::NodeId::from_hex(&node_id_hex).map_err(to_napi_error)?;
+    let version_id =
+        kchat_drive_types::VersionId::from_hex(&version_id_hex).map_err(to_napi_error)?;
     let drive_id = hex::decode(&drive_id_hex)
-        .map_err(|e| napi::Error::from_reason(format!("invalid drive_id: {}", e)))?;
-    let drive_id: [u8; 16] = drive_id.as_slice().try_into()
-        .map_err(|_| napi::Error::from_reason("drive_id must be 16 bytes"))?;
-    let domain_id = kchat_drive_types::DomainId::from_hex(&domain_id_hex)
-        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        .map_err(|e| invalid_input(format!("invalid drive_id: {}", e)))?;
+    let drive_id: [u8; 16] = drive_id
+        .as_slice()
+        .try_into()
+        .map_err(|_| invalid_input("drive_id must be 16 bytes".to_string()))?;
+    let domain_id = kchat_drive_types::DomainId::from_hex(&domain_id_hex).map_err(to_napi_error)?;
     let snapshot_hash = hex::decode(&access_context_snapshot_hash_hex)
-        .map_err(|e| napi::Error::from_reason(format!("invalid snapshot_hash: {}", e)))?;
-    let snapshot_hash: [u8; 32] = snapshot_hash.as_slice().try_into()
-        .map_err(|_| napi::Error::from_reason("snapshot_hash must be 32 bytes"))?;
+        .map_err(|e| invalid_input(format!("invalid snapshot_hash: {}", e)))?;
+    let snapshot_hash: [u8; 32] = snapshot_hash
+        .as_slice()
+        .try_into()
+        .map_err(|_| invalid_input("snapshot_hash must be 32 bytes".to_string()))?;
 
     let manifest_ct = hex::decode(&manifest_ciphertext_hex)
-        .map_err(|e| napi::Error::from_reason(format!("invalid manifest_ciphertext: {}", e)))?;
+        .map_err(|e| invalid_input(format!("invalid manifest_ciphertext: {}", e)))?;
     let manifest_nonce_bytes = hex::decode(&manifest_nonce_hex)
-        .map_err(|e| napi::Error::from_reason(format!("invalid manifest_nonce: {}", e)))?;
-    let manifest_nonce_bytes: [u8; 12] = manifest_nonce_bytes.as_slice().try_into()
-        .map_err(|_| napi::Error::from_reason("manifest_nonce must be 12 bytes"))?;
+        .map_err(|e| invalid_input(format!("invalid manifest_nonce: {}", e)))?;
+    let manifest_nonce_bytes: [u8; 12] = manifest_nonce_bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| invalid_input("manifest_nonce must be 12 bytes".to_string()))?;
     let manifest_nonce = kchat_drive_types::Nonce12::new(manifest_nonce_bytes);
 
     let manifest = kchat_drive_crypto::decrypt_manifest(
-        &version_dek, &node_id, &version_id, &manifest_ct, &manifest_nonce,
-    ).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        &version_dek,
+        &node_id,
+        &version_id,
+        &manifest_ct,
+        &manifest_nonce,
+    )
+    .map_err(to_napi_error)?;
 
     let ciphertexts: Vec<Vec<u8>> = ciphertexts_hex
         .iter()
-        .map(|h| hex::decode(h).map_err(|e| napi::Error::from_reason(format!("invalid ciphertext hex: {}", e))))
+        .map(|h| {
+            hex::decode(h).map_err(|e| invalid_input(format!("invalid ciphertext hex: {}", e)))
+        })
         .collect::<Result<_, _>>()?;
 
     let plaintext = kchat_drive_crypto::decrypt_file(
@@ -205,7 +242,8 @@ pub fn decrypt_file_napi(
         &snapshot_hash,
         &manifest.chunk_plan,
         &ciphertexts,
-    ).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+    )
+    .map_err(to_napi_error)?;
 
     Ok(Buffer::from(plaintext))
 }

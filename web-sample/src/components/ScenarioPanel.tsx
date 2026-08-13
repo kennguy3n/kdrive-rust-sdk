@@ -144,14 +144,14 @@ async function runScenario1(wasm: WasmExports, tenantId: string, userId: string)
 
       let wrappedDekHex = "", wrapNonceHex = "", wrappingKeyHex = "";
       if (mode === "secured" || mode === "advanced") {
-        const dkResult = JSON.parse(wasm.generate_domain_key_wasm(domainIdHex));
+        const dkResult = JSON.parse(wasm.generate_domain_key_wasm(domainIdHex)) as DomainKeyResult;
         wrappingKeyHex = dkResult.domain_key_hex;
         const wrapResult: WrapResult = JSON.parse(wasm.wrap_dek_under_domain_key(wrappingKeyHex, versionDekHex));
         wrappedDekHex = wrapResult.wrapped_dek_hex;
         wrapNonceHex = wrapResult.wrap_nonce_hex;
       } else {
         const grantIdHex = wasm.random_id_hex();
-        const sgkResult = JSON.parse(wasm.generate_share_grant_key_wasm(grantIdHex, JSON.stringify([toHexId(wasm, userId)]), snapshotHashHex, 1n, snapshotHashHex));
+        const sgkResult = JSON.parse(wasm.generate_share_grant_key_wasm(grantIdHex, JSON.stringify([toHexId(wasm, userId)]), snapshotHashHex, 1n, snapshotHashHex)) as ShareGrantKeyResult;
         wrappingKeyHex = sgkResult.share_grant_key_hex;
         const wrapResult: WrapResult = JSON.parse(wasm.wrap_dek_under_share_grant_key(wrappingKeyHex, versionDekHex));
         wrappedDekHex = wrapResult.wrapped_dek_hex;
@@ -195,7 +195,7 @@ async function runScenario1(wasm: WasmExports, tenantId: string, userId: string)
         }
         uploadOk = true;
       } catch (err) {
-        uploadErr = String(err);
+        uploadErr = api.formatError(err);
       }
 
       results.push({
@@ -211,7 +211,7 @@ async function runScenario1(wasm: WasmExports, tenantId: string, userId: string)
         },
       });
     } catch (err) {
-      results.push({ scenario: `Upload (${mode})`, success: false, details: String(err) });
+      results.push({ scenario: `Upload (${mode})`, success: false, details: api.formatError(err) });
     }
   }
   return results;
@@ -236,7 +236,7 @@ async function runScenario2(wasm: WasmExports, tenantId: string, userId: string,
     );
 
     // Secured mode: domain key chain allows backward walk
-    const dkResult = JSON.parse(wasm.generate_domain_key_wasm(domainIdHex));
+    const dkResult = JSON.parse(wasm.generate_domain_key_wasm(domainIdHex)) as DomainKeyResult;
     const domainKeyHex = dkResult.domain_key_hex;
     await storeKey(`domain_key_${domainIdHex}`, domainKeyHex);
 
@@ -260,7 +260,7 @@ async function runScenario2(wasm: WasmExports, tenantId: string, userId: string,
       // In Max mode, late joiner does NOT get the old share grant key
       // They only get future versions via a new share grant
       const grantIdHex = wasm.random_id_hex();
-      const sgkResult = JSON.parse(wasm.generate_share_grant_key_wasm(grantIdHex, JSON.stringify([toHexId(wasm, lateJoiner.id)]), snapshotHashHex, 2n, snapshotHashHex));
+      const sgkResult = JSON.parse(wasm.generate_share_grant_key_wasm(grantIdHex, JSON.stringify([toHexId(wasm, lateJoiner.id)]), snapshotHashHex, 2n, snapshotHashHex)) as ShareGrantKeyResult;
       const newShareGrantKey = sgkResult.share_grant_key_hex;
 
       // The old version was wrapped under the old share grant key (which the late joiner doesn't have)
@@ -273,7 +273,7 @@ async function runScenario2(wasm: WasmExports, tenantId: string, userId: string,
       });
     }
   } catch (err) {
-    results.push({ scenario: "Late joiner history", success: false, details: String(err) });
+    results.push({ scenario: "Late joiner history", success: false, details: api.formatError(err) });
   }
   return results;
 }
@@ -296,7 +296,7 @@ async function runScenario3(wasm: WasmExports, tenantId: string, userId: string,
     );
 
     // Secured: admin has domain key → can unwrap DEK → can decrypt
-    const dkResult = JSON.parse(wasm.generate_domain_key_wasm(domainIdHex));
+    const dkResult = JSON.parse(wasm.generate_domain_key_wasm(domainIdHex)) as DomainKeyResult;
     const domainKeyHex = dkResult.domain_key_hex;
     const wrapResult: WrapResult = JSON.parse(wasm.wrap_dek_under_domain_key(domainKeyHex, versionDekHex));
     const unwrappedDek = wasm.unwrap_dek_from_domain_key(domainKeyHex, wrapResult.wrapped_dek_hex, wrapResult.wrap_nonce_hex);
@@ -312,7 +312,7 @@ async function runScenario3(wasm: WasmExports, tenantId: string, userId: string,
     // Max: admin does NOT have share grant key → cannot unwrap DEK
     // Verify by attempting unwrap with a random key — it should fail
     const grantIdHex = wasm.random_id_hex();
-    const sgkResult = JSON.parse(wasm.generate_share_grant_key_wasm(grantIdHex, JSON.stringify([toHexId(wasm, userId)]), snapshotHashHex, 1n, snapshotHashHex));
+    const sgkResult = JSON.parse(wasm.generate_share_grant_key_wasm(grantIdHex, JSON.stringify([toHexId(wasm, userId)]), snapshotHashHex, 1n, snapshotHashHex)) as ShareGrantKeyResult;
     const adminShareGrantKey = sgkResult.share_grant_key_hex;
     const maxWrap: WrapResult = JSON.parse(wasm.wrap_dek_under_share_grant_key(adminShareGrantKey, versionDekHex));
 
@@ -332,7 +332,7 @@ async function runScenario3(wasm: WasmExports, tenantId: string, userId: string,
       evidence: { mode: "max", recovery: maxUnwrapFailed ? "denied" : "succeeded" },
     });
   } catch (err) {
-    results.push({ scenario: "Admin recovery", success: false, details: String(err) });
+    results.push({ scenario: "Admin recovery", success: false, details: api.formatError(err) });
   }
   return results;
 }
@@ -347,11 +347,11 @@ async function runScenario4(wasm: WasmExports, tenantId: string, userId: string,
     const grantIdHex = wasm.random_id_hex();
 
     // Epoch 1: user is a recipient
-    const sgk1 = JSON.parse(wasm.generate_share_grant_key_wasm(grantIdHex, JSON.stringify([toHexId(wasm, userId)]), snapshotHashHex, 1n, snapshotHashHex));
+    const sgk1 = JSON.parse(wasm.generate_share_grant_key_wasm(grantIdHex, JSON.stringify([toHexId(wasm, userId)]), snapshotHashHex, 1n, snapshotHashHex)) as ShareGrantKeyResult;
     const oldKey = sgk1.share_grant_key_hex;
 
     // Epoch 2: user removed, new key generated without them
-    const sgk2 = JSON.parse(wasm.generate_share_grant_key_wasm(grantIdHex, JSON.stringify([toHexId(wasm, "other_user")]), snapshotHashHex, 2n, snapshotHashHex));
+    const sgk2 = JSON.parse(wasm.generate_share_grant_key_wasm(grantIdHex, JSON.stringify([toHexId(wasm, "other_user")]), snapshotHashHex, 2n, snapshotHashHex)) as ShareGrantKeyResult;
     const newKey = sgk2.share_grant_key_hex;
 
     // New version encrypted under new DEK, wrapped under new share grant key
@@ -373,7 +373,7 @@ async function runScenario4(wasm: WasmExports, tenantId: string, userId: string,
       evidence: { old_epoch: 1, new_epoch: 2, old_key_prefix: oldKey.slice(0, 16), new_key_prefix: newKey.slice(0, 16) },
     });
   } catch (err) {
-    results.push({ scenario: "User removal", success: false, details: String(err) });
+    results.push({ scenario: "User removal", success: false, details: api.formatError(err) });
   }
   return results;
 }
@@ -394,7 +394,7 @@ async function runScenario5(wasm: WasmExports, tenantId: string, userId: string)
         const dek = wasm.generate_version_dek();
         const grantIdHex = wasm.random_id_hex();
         const snapshotHashHex = wasm.sha256_hex(new Uint8Array(32));
-        const sgkResult = JSON.parse(wasm.generate_share_grant_key_wasm(grantIdHex, JSON.stringify([toHexId(wasm, userId)]), snapshotHashHex, 1n, snapshotHashHex));
+        const sgkResult = JSON.parse(wasm.generate_share_grant_key_wasm(grantIdHex, JSON.stringify([toHexId(wasm, userId)]), snapshotHashHex, 1n, snapshotHashHex)) as ShareGrantKeyResult;
         const wrapResult: WrapResult = JSON.parse(wasm.wrap_dek_under_share_grant_key(sgkResult.share_grant_key_hex, dek));
         const unwrapped = wasm.unwrap_dek_from_share_grant_key(sgkResult.share_grant_key_hex, wrapResult.wrapped_dek_hex, wrapResult.wrap_nonce_hex);
         const ok = unwrapped === dek;
@@ -405,7 +405,7 @@ async function runScenario5(wasm: WasmExports, tenantId: string, userId: string)
           evidence: { tenant: b2cTenant, mode, allowed: true },
         });
       } catch (err) {
-        results.push({ scenario: `B2C upload (${mode})`, success: false, details: `Max mode failed: ${err}` });
+        results.push({ scenario: `B2C upload (${mode})`, success: false, details: `Max mode failed: ${api.formatError(err)}` });
       }
     } else {
       // Client-side policy enforcement: non-Max modes are rejected before any crypto operation
@@ -476,7 +476,7 @@ async function runScenario6(wasm: WasmExports): Promise<ScenarioResult[]> {
       evidence: { chunk_root: encResult.chunkPlanRoot, chunk_count: encResult.chunkCount },
     });
   } catch (err) {
-    results.push({ scenario: "Vector check", success: false, details: String(err) });
+    results.push({ scenario: "Vector check", success: false, details: api.formatError(err) });
   }
   return results;
 }

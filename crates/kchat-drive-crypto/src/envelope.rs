@@ -7,12 +7,12 @@ use hpke::{
     kdf::HkdfSha256, kem::X25519HkdfSha256, setup_receiver, setup_sender,
 };
 use rand::rngs::OsRng;
+use zeroize::Zeroize;
 
 use kchat_drive_types::{
     DomainId, DriveError, EnvelopeId, EnvelopeVariant, Hash256, KeyEnvelope, Nonce12, UserId,
     VersionId, X25519PublicKey,
 };
-
 
 /// Seals a VersionDEK under an HPKE recipient envelope (SetupBaseS).
 /// Returns the complete KeyEnvelope with variant = Hpke.
@@ -33,12 +33,12 @@ pub fn seal_hpke_envelope(
         setup_sender::<HpkeAesGcm256, HkdfSha256, X25519HkdfSha256, _>(
             &OpModeS::Base,
             &recipient_pk,
-            b"kchat-drive/v1",
+            crate::labels::HPKE_INFO,
             &mut OsRng,
         )
         .map_err(|e| DriveError::Crypto(format!("HPKE setup_sender: {}", e)))?;
 
-    let aad = b"kchat-drive/envelope/v1";
+    let aad = crate::labels::ENVELOPE_AAD;
     let ciphertext = context
         .seal(version_dek, aad)
         .map_err(|e| DriveError::Crypto(format!("HPKE seal: {}", e)))?;
@@ -79,24 +79,27 @@ pub fn open_hpke_envelope(
         &OpModeR::Base,
         &priv_key,
         &encapped,
-        b"kchat-drive/v1",
+        crate::labels::HPKE_INFO,
     )
     .map_err(|e| DriveError::Crypto(format!("HPKE setup_receiver: {}", e)))?;
 
-    let aad = b"kchat-drive/envelope/v1";
-    let plaintext = context
+    let aad = crate::labels::ENVELOPE_AAD;
+    let mut plaintext = context
         .open(&envelope.ciphertext, aad)
         .map_err(|e| DriveError::Crypto(format!("HPKE open: {}", e)))?;
 
     if plaintext.len() != 32 {
+        let len = plaintext.len();
+        plaintext.zeroize();
         return Err(DriveError::Envelope(format!(
             "expected 32-byte key, got {}",
-            plaintext.len()
+            len
         )));
     }
 
     let mut key = [0u8; 32];
     key.copy_from_slice(&plaintext);
+    plaintext.zeroize();
     Ok(key)
 }
 
@@ -119,7 +122,7 @@ pub fn create_mls_transport_envelope(
         Aes256Gcm::new_from_slice(transport_key).map_err(|e| DriveError::Crypto(e.to_string()))?;
     let nonce = Nonce::from_slice(transport_nonce.as_bytes());
 
-    let aad = b"kchat-drive/envelope/v1";
+    let aad = crate::labels::ENVELOPE_AAD;
     let ciphertext = cipher
         .encrypt(
             nonce,
@@ -163,8 +166,8 @@ pub fn open_mls_transport_envelope(
         Aes256Gcm::new_from_slice(transport_key).map_err(|e| DriveError::Crypto(e.to_string()))?;
     let nonce = Nonce::from_slice(transport_nonce.as_bytes());
 
-    let aad = b"kchat-drive/envelope/v1";
-    let plaintext = cipher
+    let aad = crate::labels::ENVELOPE_AAD;
+    let mut plaintext = cipher
         .decrypt(
             nonce,
             Payload {
@@ -175,14 +178,17 @@ pub fn open_mls_transport_envelope(
         .map_err(|e| DriveError::Crypto(e.to_string()))?;
 
     if plaintext.len() != 32 {
+        let len = plaintext.len();
+        plaintext.zeroize();
         return Err(DriveError::Envelope(format!(
             "expected 32-byte key, got {}",
-            plaintext.len()
+            len
         )));
     }
 
     let mut key = [0u8; 32];
     key.copy_from_slice(&plaintext);
+    plaintext.zeroize();
     Ok(key)
 }
 
@@ -201,7 +207,7 @@ pub fn create_recovery_envelope(
         Aes256Gcm::new_from_slice(recovery_key).map_err(|e| DriveError::Crypto(e.to_string()))?;
     let nonce = Nonce::from_slice(recovery_nonce.as_bytes());
 
-    let aad = b"kchat-drive/recovery/v1";
+    let aad = crate::labels::RECOVERY_AAD;
     let ciphertext = cipher
         .encrypt(
             nonce,
@@ -242,8 +248,8 @@ pub fn open_recovery_envelope(
         Aes256Gcm::new_from_slice(recovery_key).map_err(|e| DriveError::Crypto(e.to_string()))?;
     let nonce = Nonce::from_slice(nonce.as_bytes());
 
-    let aad = b"kchat-drive/recovery/v1";
-    let plaintext = cipher
+    let aad = crate::labels::RECOVERY_AAD;
+    let mut plaintext = cipher
         .decrypt(
             nonce,
             Payload {
@@ -254,14 +260,17 @@ pub fn open_recovery_envelope(
         .map_err(|e| DriveError::Crypto(e.to_string()))?;
 
     if plaintext.len() != 32 {
+        let len = plaintext.len();
+        plaintext.zeroize();
         return Err(DriveError::Envelope(format!(
             "expected 32-byte key, got {}",
-            plaintext.len()
+            len
         )));
     }
 
     let mut key = [0u8; 32];
     key.copy_from_slice(&plaintext);
+    plaintext.zeroize();
     Ok(key)
 }
 

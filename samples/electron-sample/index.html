@@ -151,6 +151,25 @@
     <pre id="vectors-output">Click "Fetch Vectors" to get the KDRV1 test vectors from the Rust SDK…</pre>
   </div>
 
+  <div class="card">
+    <h2>4. Content Dedup (KDRV1)</h2>
+    <p style="font-size:12px;color:#666;margin:0 0 12px;">
+      Upload the same content twice. The second upload should show a
+      <span class="status ok" style="padding:1px 6px;">DEDUPED</span> badge,
+      meaning zero new chunks were uploaded.
+    </p>
+    <div class="row">
+      <label>Dedup plaintext:</label>
+      <input type="text" id="dedup-plaintext" value="Dedup test: same content = same ciphertext" />
+    </div>
+    <div class="row">
+      <button id="btn-dedup-upload1">Upload #1</button>
+      <button id="btn-dedup-upload2" disabled>Upload #2 (same content)</button>
+      <span id="dedup-status" class="status pending">not run</span>
+    </div>
+    <pre id="dedup-output">Click "Upload #1" then "Upload #2" to see cross-mode dedup in action…</pre>
+  </div>
+
   <script>
     const $ = (id) => document.getElementById(id);
 
@@ -242,6 +261,93 @@
       const parsed = JSON.parse(v);
       $("vectors-output").textContent = JSON.stringify(parsed, null, 2);
       setStatus("vectors-status", true, "OK (protocol=" + parsed.protocol + ")");
+    });
+
+    // --- Content Dedup (KDRV1) with SDK-managed pepper ---
+
+    // Tenant ID for the demo (deterministic 16-byte hex derived from "tenant_demo")
+    const TENANT_ID_HEX = "74656e616e745f64656d6f0000000000";
+    let dedupState = null;
+
+    async function dedupUpload(label) {
+      try {
+        setStatus("dedup-status", false, "running…");
+        const plaintext = $("dedup-plaintext").value;
+        if (!plaintext.trim()) {
+          setStatus("dedup-status", false, "ERROR: empty input");
+          return;
+        }
+
+        // Pepper is managed by the SDK vault — JS NEVER sees it.
+        // The high-level dedupUpload method loads pepper internally,
+        // performs the full dedup flow, and returns only the result.
+
+        // Ensure pepper exists in the vault (auto-creates on first call)
+        await window.kdrive.ensureTenantPepper(TENANT_ID_HEX);
+
+        const ptHex = Array.from(new TextEncoder().encode(plaintext))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
+
+        // Generate ephemeral keys for the demo (in production, use real device keys)
+        const keypair = await window.kdrive.generateEd25519Keypair();
+        const driveId = "01010101010101010101010101010101";
+        const nodeId = "02020202020202020202020202020202";
+        const domainId = "03030303030303030303030303030303";
+        const wrappingKey = await window.kdrive.generateVersionDek();
+
+        const resultJson = await window.kdrive.dedupUpload({
+          tenantIdHex: TENANT_ID_HEX,
+          driveIdHex: driveId,
+          nodeIdHex: nodeId,
+          domainIdHex: domainId,
+          privacyMode: 1, // Secured
+          plaintextHex: ptHex,
+          creatorDeviceKeyHex: keypair.publicKeyHex,
+          signingKeyHex: keypair.privateKeyHex,
+          accessContextRevision: 1,
+          accessContextSnapshotHashHex: "00".repeat(32),
+          wrappingKeyHex: wrappingKey,
+        });
+
+        const result = JSON.parse(resultJson);
+        const isDup = dedupState.contentId !== null && dedupState.contentId === result.content_id_hex;
+        const badge = isDup ? " [DEDUPED]" : " [NEW]";
+
+        const output =
+          label + badge + "\n" +
+          "Content ID:    " + result.content_id_hex.slice(0, 32) + "…\n" +
+          "Chunk count:   " + result.chunk_count + "\n" +
+          "Blob keys:     " + result.all_blob_keys.length + " blob(s)\n" +
+          "New blobs:     " + result.new_blob_keys.length + "\n" +
+          "Reused blobs:  " + result.reused_blob_keys.length + "\n" +
+          "Fully deduped: " + result.fully_deduped + "\n" +
+          "Pepper source: SDK vault (never exposed to JS)\n" +
+          (isDup
+            ? "Dedup match:  YES (same content_id as upload #1)\n"
+            : "Dedup match:  NO (first upload)\n");
+
+        if (dedupState.contentId === null) {
+          dedupState.contentId = result.content_id_hex;
+        }
+
+        $("dedup-output").textContent = output;
+        setStatus("dedup-status", true, isDup ? "DEDUPED" : "NEW");
+      } catch (err) {
+        $("dedup-output").textContent = String(err);
+        setStatus("dedup-status", false, "ERROR");
+      }
+    }
+
+    $("btn-dedup-upload1").addEventListener("click", async () => {
+      dedupState = null;
+      $("btn-dedup-upload2").disabled = true;
+      await dedupUpload("Upload #1");
+      $("btn-dedup-upload2").disabled = false;
+    });
+
+    $("btn-dedup-upload2").addEventListener("click", () => {
+      dedupUpload("Upload #2");
     });
   </script>
 </body>

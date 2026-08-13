@@ -32,7 +32,7 @@ export function VectorCheck() {
         setMatchResult("Gateway not reachable — showing Rust vectors only.");
       }
     } catch (err) {
-      setMatchResult(`Error: ${err}`);
+      setMatchResult(`Error: ${api.formatError(err)}`);
     } finally {
       setBusy(false);
     }

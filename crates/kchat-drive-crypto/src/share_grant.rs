@@ -3,6 +3,7 @@ use aes_gcm::{
     aead::{Aead, KeyInit, Payload},
 };
 use sha2::{Digest, Sha256};
+use zeroize::Zeroize;
 
 use kchat_drive_types::{
     DriveError, Hash256, Key256, Nonce12, ShareGrantId, ShareGrantKeyRecord, UserId,
@@ -70,7 +71,7 @@ pub fn wrap_version_dek_under_share_grant_key(
     rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
 
-    let aad = b"kchat-drive/share-grant-wrap/v1";
+    let aad = crate::labels::SHARE_GRANT_WRAP_AAD;
     let ct = cipher
         .encrypt(
             nonce,
@@ -94,8 +95,8 @@ pub fn unwrap_version_dek_from_share_grant_key(
         .map_err(|e| DriveError::Crypto(e.to_string()))?;
     let nonce = Nonce::from_slice(nonce.as_bytes());
 
-    let aad = b"kchat-drive/share-grant-wrap/v1";
-    let plaintext = cipher
+    let aad = crate::labels::SHARE_GRANT_WRAP_AAD;
+    let mut plaintext = cipher
         .decrypt(
             nonce,
             Payload {
@@ -106,14 +107,17 @@ pub fn unwrap_version_dek_from_share_grant_key(
         .map_err(|e| DriveError::Crypto(e.to_string()))?;
 
     if plaintext.len() != 32 {
+        let len = plaintext.len();
+        plaintext.zeroize();
         return Err(DriveError::Crypto(format!(
             "expected 32-byte key, got {}",
-            plaintext.len()
+            len
         )));
     }
 
     let mut key = [0u8; 32];
     key.copy_from_slice(&plaintext);
+    plaintext.zeroize();
     Ok(key)
 }
 

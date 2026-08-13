@@ -426,3 +426,124 @@ body {
 .log-entry.success { color: var(--success); }
 .log-entry.error { color: var(--error); }
 .log-entry.info { color: var(--text); }
+
+/* --- Dedup Panel --- */
+.dedup-panel {
+  padding: 20px;
+  background: var(--surface);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.dedup-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.dedup-header h3 { margin: 0; font-size: 16px; }
+.dedup-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+.dedup-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.dedup-row label {
+  width: 100px;
+  font-size: 13px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.dedup-row input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 12px;
+}
+.dedup-buttons {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+}
+.dedup-buttons button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  background: var(--primary);
+  color: white;
+  cursor: pointer;
+  font-size: 13px;
+}
+.dedup-buttons button:disabled {
+  background: var(--text-muted);
+  cursor: default;
+}
+.dedup-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background: var(--surface-alt);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+.dedup-status.deduped {
+  background: #d1fae5;
+  color: #065f46;
+  font-weight: 600;
+}
+.dedup-error {
+  color: var(--error);
+  font-size: 13px;
+  padding: 8px;
+  background: #fee2e2;
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+.dedup-result {
+  margin-bottom: 12px;
+}
+.dedup-result h4 {
+  font-size: 14px;
+  margin: 0 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dedup-result pre {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  overflow-x: auto;
+}
+.badge-deduped {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: #d1fae5;
+  color: #065f46;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.dedup-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 10px;
+  background: var(--surface-alt);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}

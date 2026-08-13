@@ -5,6 +5,9 @@ use minicbor::{Decode, Encode};
 /// File manifest (architecture §9.3).
 /// Encrypted with ManifestKey and stored alongside the version header.
 /// The manifest contains the chunk plan and file metadata.
+///
+/// KDRV1 fields (content_id, wrapped_content_key, content_wrap_nonce) are
+/// None for KDRV1 manifests and Some for KDRV1 manifests.
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub struct Manifest {
     /// Version ID this manifest belongs to.
@@ -38,6 +41,28 @@ pub struct Manifest {
     /// Optional parent version ID (for version chains).
     #[n(7)]
     pub parent_version_id: Option<VersionId>,
+
+    /// KDRV1: content ID (HMAC of plaintext hash with tenant pepper).
+    /// None for KDRV1 manifests.
+    #[n(8)]
+    pub content_id: Option<Hash256>,
+
+    /// KDRV1: ContentKey wrapped under VersionDEK.
+    /// None for KDRV1 manifests.
+    #[n(9)]
+    pub wrapped_content_key: Option<Vec<u8>>,
+
+    /// KDRV1: nonce used for ContentKey wrapping.
+    /// None for KDRV1 manifests.
+    #[n(10)]
+    pub content_wrap_nonce: Option<Nonce12>,
+}
+
+impl Manifest {
+    /// Returns true if this is a KDRV1 manifest (has content dedup fields).
+    pub fn is_kdrv2(&self) -> bool {
+        self.content_id.is_some()
+    }
 }
 
 /// Domain key record (for Secured/Advanced backward chain, architecture §8.1).

@@ -17,7 +17,10 @@ pub struct EnrollmentResult {
 /// 1. Account root keypair (Ed25519)
 /// 2. Device keypair (Ed25519)
 /// 3. Account authority record signed by the root key
-pub fn enroll_user(user_id: UserId, device_name: Option<String>) -> Result<EnrollmentResult, DriveError> {
+pub fn enroll_user(
+    user_id: UserId,
+    device_name: Option<String>,
+) -> Result<EnrollmentResult, DriveError> {
     // Generate account root key.
     let root_signing_key = SigningKey::generate(&mut rand::rngs::OsRng);
     let root_verifying_key = root_signing_key.verifying_key();

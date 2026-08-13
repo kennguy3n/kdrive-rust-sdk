@@ -2,7 +2,9 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
     aead::{Aead, KeyInit, Payload},
 };
+use rand::RngCore;
 use sha2::{Digest, Sha256};
+use zeroize::Zeroize;
 
 use kchat_drive_types::{DomainId, DomainKeyRecord, DriveError, Hash256, Key256, Nonce12};
 
@@ -34,11 +36,10 @@ pub fn rotate_domain_key(current: &DomainKeyRecord) -> Result<DomainKeyRecord, D
         Aes256Gcm::new_from_slice(&new_key).map_err(|e| DriveError::Crypto(e.to_string()))?;
 
     let mut nonce_bytes = [0u8; 12];
-    use rand::RngCore;
     rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
 
-    let aad = b"kchat-drive/domain-key-chain/v1";
+    let aad = crate::labels::DOMAIN_KEY_CHAIN_AAD;
     let prev_envelope = cipher
         .encrypt(
             nonce,
@@ -79,8 +80,8 @@ pub fn walk_backward(current: &DomainKeyRecord) -> Result<Key256, DriveError> {
         .map_err(|e| DriveError::Crypto(e.to_string()))?;
     let nonce = Nonce::from_slice(prev_nonce.as_bytes());
 
-    let aad = b"kchat-drive/domain-key-chain/v1";
-    let plaintext = cipher
+    let aad = crate::labels::DOMAIN_KEY_CHAIN_AAD;
+    let mut plaintext = cipher
         .decrypt(
             nonce,
             Payload {
@@ -91,14 +92,17 @@ pub fn walk_backward(current: &DomainKeyRecord) -> Result<Key256, DriveError> {
         .map_err(|e| DriveError::Crypto(e.to_string()))?;
 
     if plaintext.len() != 32 {
+        let len = plaintext.len();
+        plaintext.zeroize();
         return Err(DriveError::Crypto(format!(
             "expected 32-byte key, got {}",
-            plaintext.len()
+            len
         )));
     }
 
     let mut key = [0u8; 32];
     key.copy_from_slice(&plaintext);
+    plaintext.zeroize();
     Ok(Key256::new(key))
 }
 
@@ -112,11 +116,10 @@ pub fn wrap_version_dek_under_domain_key(
         .map_err(|e| DriveError::Crypto(e.to_string()))?;
 
     let mut nonce_bytes = [0u8; 12];
-    use rand::RngCore;
     rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
 
-    let aad = b"kchat-drive/domain-wrap/v1";
+    let aad = crate::labels::DOMAIN_WRAP_AAD;
     let ct = cipher
         .encrypt(
             nonce,
@@ -140,8 +143,8 @@ pub fn unwrap_version_dek_from_domain_key(
         .map_err(|e| DriveError::Crypto(e.to_string()))?;
     let nonce = Nonce::from_slice(nonce.as_bytes());
 
-    let aad = b"kchat-drive/domain-wrap/v1";
-    let plaintext = cipher
+    let aad = crate::labels::DOMAIN_WRAP_AAD;
+    let mut plaintext = cipher
         .decrypt(
             nonce,
             Payload {
@@ -152,14 +155,17 @@ pub fn unwrap_version_dek_from_domain_key(
         .map_err(|e| DriveError::Crypto(e.to_string()))?;
 
     if plaintext.len() != 32 {
+        let len = plaintext.len();
+        plaintext.zeroize();
         return Err(DriveError::Crypto(format!(
             "expected 32-byte key, got {}",
-            plaintext.len()
+            len
         )));
     }
 
     let mut key = [0u8; 32];
     key.copy_from_slice(&plaintext);
+    plaintext.zeroize();
     Ok(key)
 }
 

@@ -42,9 +42,8 @@ impl EpochBarrier {
     /// Records the current epoch for a grant.
     pub fn set_grant_epoch(&mut self, grant_id: ShareGrantId, epoch: u64) {
         self.grant_epochs.insert(grant_id.clone(), epoch);
-        self.pending.retain(|p| {
-            !(p.grant_id.as_ref() == Some(&grant_id) && epoch >= p.target_epoch)
-        });
+        self.pending
+            .retain(|p| !(p.grant_id.as_ref() == Some(&grant_id) && epoch >= p.target_epoch));
     }
 
     /// Checks if the barrier is satisfied for a domain.

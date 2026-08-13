@@ -1,4 +1,5 @@
 use kchat_drive_crypto::*;
+#[allow(unused_imports)]
 use kchat_drive_types::*;
 
 #[test]

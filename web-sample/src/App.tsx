@@ -54,7 +54,7 @@ export default function App() {
         if (fullUsers.length > 0) setCurrentUser(fullUsers[0]);
         setWasmReady(true);
       } catch (err) {
-        setWasmError(String(err));
+        setWasmError(api.formatError(err));
       }
     })();
   }, []);
@@ -62,7 +62,9 @@ export default function App() {
   // Fetch tenants from gateway
   useEffect(() => {
     if (!wasmReady) return;
-    api.fetchTenants().then(setTenants).catch(() => {});
+    api.fetchTenants().then(setTenants).catch((err) => {
+      console.error("Failed to fetch tenants:", err);
+    });
   }, [wasmReady]);
 
   const handleScenarioComplete = useCallback((results: ScenarioResult[]) => {

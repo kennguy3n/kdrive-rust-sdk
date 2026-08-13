@@ -1,10 +1,9 @@
 use openmls::group::MlsGroup;
 use openmls_traits::OpenMlsProvider;
 use sha2::Digest;
+use zeroize::Zeroize;
 
-use kchat_drive_types::{
-    DriveError, DurableKeyReceipt, EnvelopeId, Hash256, Key256, Nonce12,
-};
+use kchat_drive_types::{DriveError, DurableKeyReceipt, EnvelopeId, Hash256, Key256, Nonce12};
 
 use kchat_drive_crypto::{
     create_mls_transport_envelope, generate_salt, open_mls_transport_envelope,
@@ -39,7 +38,7 @@ pub fn seal_max_share_grant_key<Provider: OpenMlsProvider>(
 
     // Derive transport key + nonce.
     let context_hash = ctx.context_hash();
-    let (transport_key, transport_nonce) = derive_transport_key_and_nonce(
+    let (mut transport_key, mut transport_nonce) = derive_transport_key_and_nonce(
         &transport_salt,
         &exporter_output,
         MAX_PURPOSE,
@@ -59,6 +58,9 @@ pub fn seal_max_share_grant_key<Provider: OpenMlsProvider>(
         None,
         Some(ctx.generation),
     )?;
+
+    transport_key.zeroize();
+    transport_nonce.zeroize();
 
     Ok(envelope)
 }
@@ -92,7 +94,7 @@ pub fn open_max_share_grant_key_and_store<Provider: OpenMlsProvider>(
 
     // Derive transport key + nonce.
     let context_hash = ctx.context_hash();
-    let (transport_key, _) = derive_transport_key_and_nonce(
+    let (mut transport_key, mut transport_nonce) = derive_transport_key_and_nonce(
         transport_salt,
         &exporter_output,
         MAX_PURPOSE,
@@ -118,5 +120,9 @@ pub fn open_max_share_grant_key_and_store<Provider: OpenMlsProvider>(
         exporter_label: label.to_string(),
     };
 
+    transport_key.zeroize();
+    transport_nonce.zeroize();
+
+    // Key256 has ZeroizeOnDrop, so key_bytes are zeroized when the Key256 is dropped.
     Ok((Key256::new(key_bytes), receipt))
 }

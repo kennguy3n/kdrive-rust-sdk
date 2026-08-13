@@ -22,6 +22,12 @@ serde = { workspace = true }
 minicbor = { workspace = true, features = ["derive", "alloc"] }
 sha2 = { workspace = true }
 ed25519-dalek = { workspace = true }
+hex = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true }
+
+[dev-dependencies]
+sha2 = { workspace = true }
+hex = { workspace = true }
+rand = { workspace = true }

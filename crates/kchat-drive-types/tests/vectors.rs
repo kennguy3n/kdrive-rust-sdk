@@ -50,6 +50,7 @@ fn cbor_header_roundtrip() {
         creator_device_key: Ed25519PublicKey::new([0xee; 32]),
         created_at: 1700000000,
         signature: None,
+        content_id: None,
     };
 
     let mut buf = Vec::new();
@@ -101,6 +102,9 @@ fn cbor_manifest_roundtrip() {
         plaintext_size: 1024,
         created_at: 1700000000,
         parent_version_id: None,
+        content_id: None,
+        wrapped_content_key: None,
+        content_wrap_nonce: None,
     };
 
     let mut buf = Vec::new();

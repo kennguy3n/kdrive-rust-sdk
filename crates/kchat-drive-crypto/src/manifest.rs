@@ -5,6 +5,7 @@ use aes_gcm::{
 use ed25519::signature::{Signer, Verifier};
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 use sha2::{Digest, Sha256};
+use zeroize::Zeroize;
 
 use kchat_drive_types::{
     DriveError, Ed25519PublicKey, Ed25519Signature, Hash256, Manifest, NodeId, Nonce12,
@@ -59,7 +60,7 @@ pub fn decrypt_manifest(
         Aes256Gcm::new_from_slice(&key_bytes).map_err(|e| DriveError::Crypto(e.to_string()))?;
     let nonce = Nonce::from_slice(nonce.as_bytes());
 
-    let plaintext = cipher
+    let mut plaintext = cipher
         .decrypt(
             nonce,
             Payload {
@@ -70,6 +71,7 @@ pub fn decrypt_manifest(
         .map_err(|e| DriveError::Crypto(e.to_string()))?;
 
     let manifest: Manifest = minicbor::decode(&plaintext)?;
+    plaintext.zeroize();
     Ok(manifest)
 }
 
@@ -81,7 +83,7 @@ pub fn sign_header(
 ) -> Result<Ed25519Signature, DriveError> {
     let canonical = header.canonical_bytes_for_signature()?;
     let mut hasher = Sha256::new();
-    hasher.update(b"kchat-drive/version-header-signature/v1");
+    hasher.update(crate::labels::HEADER_SIGNATURE_TAG);
     hasher.update(&canonical);
     let digest = hasher.finalize();
 
@@ -101,7 +103,7 @@ pub fn verify_header(
 
     let canonical = header.canonical_bytes_for_signature()?;
     let mut hasher = Sha256::new();
-    hasher.update(b"kchat-drive/version-header-signature/v1");
+    hasher.update(crate::labels::HEADER_SIGNATURE_TAG);
     hasher.update(&canonical);
     let digest = hasher.finalize();
 
