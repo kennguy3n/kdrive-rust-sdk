@@ -21,3 +21,4 @@ thiserror = { workspace = true }
 minicbor = { workspace = true, features = ["derive", "alloc"] }
 hex = { workspace = true }
 aes-gcm = { workspace = true }
+serde = { workspace = true, features = ["derive"] }

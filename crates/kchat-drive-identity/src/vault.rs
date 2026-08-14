@@ -178,6 +178,46 @@ impl DriveKeyVault {
     pub fn list(&self) -> Vec<String> {
         self.entries.keys().cloned().collect()
     }
+
+    /// Export all encrypted entries for persistence.
+    ///
+    /// Returns a serializable representation of the vault's encrypted entries.
+    /// The master key is **not** included — it must be re-derived from the
+    /// wrapping root on the next session.
+    pub fn export_data(&self) -> Vec<VaultEntryExport> {
+        self.entries
+            .iter()
+            .map(|(key_id, entry)| VaultEntryExport {
+                key_id: key_id.clone(),
+                ciphertext: entry.ciphertext.clone(),
+                nonce: entry.nonce,
+            })
+            .collect()
+    }
+
+    /// Import previously exported encrypted entries.
+    ///
+    /// The vault must already have its master key set (via `from_master_key`).
+    pub fn import_data(&mut self, entries: &[VaultEntryExport]) {
+        for entry in entries {
+            self.entries.insert(
+                entry.key_id.clone(),
+                VaultEntry {
+                    ciphertext: entry.ciphertext.clone(),
+                    nonce: entry.nonce,
+                },
+            );
+        }
+    }
+}
+
+/// Serializable representation of a vault entry (encrypted blob + nonce).
+/// The master key is deliberately excluded — it must be re-derived per session.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct VaultEntryExport {
+    pub key_id: String,
+    pub ciphertext: Vec<u8>,
+    pub nonce: [u8; 12],
 }
 
 impl Default for DriveKeyVault {

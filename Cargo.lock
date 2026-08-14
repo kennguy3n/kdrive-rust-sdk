@@ -1238,6 +1238,7 @@ dependencies = [
  "kchat-drive-types",
  "minicbor",
  "rand 0.8.7",
+ "serde",
  "sha2",
  "thiserror",
  "zeroize",
