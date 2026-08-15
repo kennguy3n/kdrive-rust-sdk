@@ -59,6 +59,26 @@ impl FetchTransport {
         let response: web_sys::Response = response_value.into();
         let status = response.status();
 
+        // Pragmatic memory guard: if the response is larger than 50MB, refuse
+        // to load it into a single Vec. Callers should use chunked download
+        // instead. This prevents OOM in the WASM linear memory heap.
+        const MAX_RESPONSE_BYTES: u64 = 50 * 1024 * 1024;
+        let content_length = response
+            .headers()
+            .get("Content-Length")
+            .ok()
+            .flatten()
+            .and_then(|v| v.as_string())
+            .and_then(|s| s.parse::<u64>().ok());
+        if let Some(len) = content_length {
+            if len > MAX_RESPONSE_BYTES {
+                return Err(DriveError::Io(format!(
+                    "response too large ({} bytes > {} limit); use chunked download",
+                    len, MAX_RESPONSE_BYTES
+                )));
+            }
+        }
+
         let array_buffer_promise = response
             .array_buffer()
             .map_err(|e| DriveError::Io(format!("array_buffer failed: {:?}", e)))?;

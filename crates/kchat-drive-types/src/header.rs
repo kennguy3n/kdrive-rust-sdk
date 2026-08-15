@@ -150,7 +150,7 @@ impl ChunkPlan {
     /// SHA-256("kchat-drive/chunk-plan-leaf/v1" || u64be(i) || u64be(len) || sha256)
     pub fn merkle_root(&self) -> Hash256 {
         use sha2::{Digest, Sha256};
-        let mut leaves: Vec<[u8; 32]> = self
+        let leaves: Vec<[u8; 32]> = self
             .chunks
             .iter()
             .map(|c| {
@@ -170,24 +170,29 @@ impl ChunkPlan {
             return Hash256::new([0u8; 32]);
         }
 
-        while leaves.len() > 1 {
-            let mut next = Vec::with_capacity(leaves.len().div_ceil(2));
-            for pair in leaves.chunks(2) {
+        // Use two buffers and swap to avoid allocating a new Vec each level.
+        let mut buf_a = leaves;
+        let mut buf_b = Vec::new();
+        while buf_a.len() > 1 {
+            buf_b.clear();
+            buf_b.reserve(buf_a.len() / 2 + 1);
+            for pair in buf_a.chunks(2) {
                 let mut hasher = Sha256::new();
                 hasher.update(crate::CHUNK_PLAN_NODE_TAG);
                 hasher.update(pair[0]);
                 if pair.len() == 2 {
                     hasher.update(pair[1]);
                 } else {
+                    // Odd node: duplicate the last leaf (standard Merkle tree convention)
                     hasher.update(pair[0]);
                 }
                 let result = hasher.finalize();
                 let mut arr = [0u8; 32];
                 arr.copy_from_slice(&result);
-                next.push(arr);
+                buf_b.push(arr);
             }
-            leaves = next;
+            std::mem::swap(&mut buf_a, &mut buf_b);
         }
-        Hash256::new(leaves[0])
+        Hash256::new(buf_a[0])
     }
 }

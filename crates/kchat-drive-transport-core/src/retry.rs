@@ -21,12 +21,23 @@ impl Default for RetryConfig {
     }
 }
 
-/// Computes the delay for a given attempt (0-indexed).
+/// Computes the delay for a given attempt (0-indexed), with ±10% jitter.
 pub fn retry_delay(config: &RetryConfig, attempt: u32) -> Duration {
-    let delay_ms =
-        config.initial_delay.as_millis() as f64 * config.backoff_factor.powi(attempt as i32);
-    let delay = Duration::from_millis(delay_ms as u64);
-    delay.min(config.max_delay)
+    let base_ms = config.initial_delay.as_millis() as u64;
+    let delay_ms = base_ms.saturating_mul(config.backoff_factor.powi(attempt as i32) as u64);
+    let capped = delay_ms.min(config.max_delay.as_millis() as u64);
+    // Add ±10% jitter to avoid thundering-herd retries.
+    let jitter_range = capped / 10;
+    let jitter = {
+        // Use SystemTime nanos as a jitter source to avoid relying on
+        // `rand::random`, which may not be available in WASM targets.
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .subsec_nanos() as u64;
+        (nanos % (jitter_range * 2 + 1)).saturating_sub(jitter_range)
+    };
+    Duration::from_millis(capped.saturating_add(jitter))
 }
 
 /// Retries a fallible operation according to the config.

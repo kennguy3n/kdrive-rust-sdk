@@ -276,7 +276,7 @@ pub struct DriveRuntimeFfi {
 }
 
 impl DriveRuntimeFfi {
-    fn with_master_key_inner(master_key_hex: Option<&str>) -> Self {
+    fn with_master_key_inner(master_key_hex: Option<&str>) -> Result<Self, DriveSdkError> {
         let master_key = if let Some(hex_str) = master_key_hex {
             if hex_str.is_empty() {
                 use rand::RngCore;
@@ -284,10 +284,21 @@ impl DriveRuntimeFfi {
                 rand::rngs::OsRng.fill_bytes(&mut key);
                 key
             } else {
-                let bytes = hex::decode(hex_str).unwrap_or_default();
+                let bytes = hex::decode(hex_str).map_err(|e| {
+                    DriveSdkError::InvalidInput {
+                        msg: format!("invalid master_key hex: {}", e),
+                    }
+                })?;
+                if bytes.len() != 32 {
+                    return Err(DriveSdkError::InvalidInput {
+                        msg: format!(
+                            "master_key must be 32 bytes (64 hex chars), got {} bytes",
+                            bytes.len()
+                        ),
+                    });
+                }
                 let mut key = [0u8; 32];
-                let len = bytes.len().min(32);
-                key[..len].copy_from_slice(&bytes[..len]);
+                key.copy_from_slice(&bytes);
                 key
             }
         } else {
@@ -300,7 +311,7 @@ impl DriveRuntimeFfi {
             kchat_client_runtime::runtime::ClientRuntime::with_master_key(master_key),
         );
         let facade = kchat_client_runtime::facade::DriveFacade::new(runtime.clone());
-        Self { runtime, facade }
+        Ok(Self { runtime, facade })
     }
 }
 
@@ -309,13 +320,15 @@ impl DriveRuntimeFfi {
     /// Creates a runtime with a fresh auto-generated master key.
     #[uniffi::constructor]
     pub fn new() -> Self {
-        Self::with_master_key_inner(None)
+        // None case cannot fail — random key generation only.
+        Self::with_master_key_inner(None).expect("random key generation cannot fail")
     }
 
     /// Creates a runtime with a specific 32-byte master key (hex-encoded).
     /// If empty, a random key is generated.
+    /// Returns `InvalidInput` if the hex is malformed or not exactly 32 bytes.
     #[uniffi::constructor(name = "with_master_key")]
-    pub fn with_master_key(master_key_hex: String) -> Self {
+    pub fn with_master_key(master_key_hex: String) -> Result<Self, DriveSdkError> {
         Self::with_master_key_inner(Some(&master_key_hex))
     }
 

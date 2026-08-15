@@ -1282,6 +1282,7 @@ dependencies = [
  "napi-derive",
  "rand 0.8.7",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]

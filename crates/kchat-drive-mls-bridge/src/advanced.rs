@@ -31,9 +31,11 @@ pub fn seal_advanced_domain_key<Provider: OpenMlsProvider>(
     let context_bytes = ctx.context_bytes();
 
     // Call the MLS exporter.
-    let exporter_output = group
-        .export_secret(provider.crypto(), label, &context_bytes, 32)
-        .map_err(|e| DriveError::MlsBridge(format!("export_secret: {}", e)))?;
+    let exporter_output = zeroize::Zeroizing::new(
+        group
+            .export_secret(provider.crypto(), label, &context_bytes, 32)
+            .map_err(|e| DriveError::MlsBridge(format!("export_secret: {}", e)))?,
+    );
 
     // Generate a random transport salt.
     let transport_salt = generate_salt();
@@ -88,9 +90,11 @@ pub fn open_advanced_domain_key_and_store<Provider: OpenMlsProvider>(
     let context_bytes = ctx.context_bytes();
 
     // Call the MLS exporter.
-    let exporter_output = group
-        .export_secret(provider.crypto(), label, &context_bytes, 32)
-        .map_err(|e| DriveError::MlsBridge(format!("export_secret: {}", e)))?;
+    let exporter_output = zeroize::Zeroizing::new(
+        group
+            .export_secret(provider.crypto(), label, &context_bytes, 32)
+            .map_err(|e| DriveError::MlsBridge(format!("export_secret: {}", e)))?,
+    );
 
     // Extract transport salt from the envelope.
     let transport_salt = envelope

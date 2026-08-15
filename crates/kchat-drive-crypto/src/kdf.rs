@@ -10,6 +10,11 @@ pub use crate::labels::{
     CHUNK_KEY_INFO, CHUNK_NONCE_INFO, MANIFEST_KEY_INFO, MANIFEST_NONCE_INFO, VERSION_SALT,
 };
 
+/// Pre-computed byte slices for the most common KDF info strings, avoiding
+/// repeated `.as_bytes()` calls and string-to-slice conversion at each use.
+const CHUNK_KEY_INFO_BYTES: &[u8] = b"kchat-drive/chunk-key/v1";
+const CHUNK_NONCE_INFO_BYTES: &[u8] = b"kchat-drive/chunk-nonce/v1";
+
 /// Extracts the PRK from version salt + VersionDEK.
 /// PRK = HKDF-Extract(version_salt, VersionDEK)
 pub fn extract_prk(version_dek: &[u8; 32]) -> [u8; 32] {
@@ -28,15 +33,25 @@ pub fn derive_chunk_key(
     chunk_index: u64,
 ) -> [u8; 32] {
     let mut info = Vec::new();
-    info.extend_from_slice(CHUNK_KEY_INFO.as_bytes());
-    info.extend_from_slice(node_id.as_bytes());
-    info.extend_from_slice(version_id.as_bytes());
-    info.extend_from_slice(&chunk_index.to_be_bytes());
-
+    derive_chunk_key_into(node_id, version_id, chunk_index, &mut info);
     let hkdf = Hkdf::<Sha256>::from_prk(prk.as_slice()).expect("valid PRK");
     let mut okm = [0u8; 32];
     hkdf.expand(&info, &mut okm).expect("32 bytes is valid");
     okm
+}
+
+/// Builds the chunk-key HKDF info into a reusable buffer (avoids per-call allocation).
+pub fn derive_chunk_key_into(
+    node_id: &NodeId,
+    version_id: &VersionId,
+    chunk_index: u64,
+    info: &mut Vec<u8>,
+) {
+    info.clear();
+    info.extend_from_slice(CHUNK_KEY_INFO_BYTES);
+    info.extend_from_slice(node_id.as_bytes());
+    info.extend_from_slice(version_id.as_bytes());
+    info.extend_from_slice(&chunk_index.to_be_bytes());
 }
 
 /// Derives a chunk nonce:
@@ -48,15 +63,25 @@ pub fn derive_chunk_nonce(
     chunk_index: u64,
 ) -> [u8; 12] {
     let mut info = Vec::new();
-    info.extend_from_slice(CHUNK_NONCE_INFO.as_bytes());
-    info.extend_from_slice(node_id.as_bytes());
-    info.extend_from_slice(version_id.as_bytes());
-    info.extend_from_slice(&chunk_index.to_be_bytes());
-
+    derive_chunk_nonce_into(node_id, version_id, chunk_index, &mut info);
     let hkdf = Hkdf::<Sha256>::from_prk(prk.as_slice()).expect("valid PRK");
     let mut okm = [0u8; 12];
     hkdf.expand(&info, &mut okm).expect("12 bytes is valid");
     okm
+}
+
+/// Builds the chunk-nonce HKDF info into a reusable buffer (avoids per-call allocation).
+pub fn derive_chunk_nonce_into(
+    node_id: &NodeId,
+    version_id: &VersionId,
+    chunk_index: u64,
+    info: &mut Vec<u8>,
+) {
+    info.clear();
+    info.extend_from_slice(CHUNK_NONCE_INFO_BYTES);
+    info.extend_from_slice(node_id.as_bytes());
+    info.extend_from_slice(version_id.as_bytes());
+    info.extend_from_slice(&chunk_index.to_be_bytes());
 }
 
 /// Derives the manifest key:
@@ -162,6 +187,21 @@ pub fn select_chunk_size(file_size: u64) -> u64 {
     } else {
         16 * MIB
     }
+}
+
+/// Selects chunk size considering available memory (for WASM / low-memory targets).
+/// Falls back to file-size-based selection when memory is plentiful.
+#[must_use]
+pub fn select_chunk_size_with_memory(file_size: u64, available_memory_mb: usize) -> u64 {
+    // For WASM (low memory), use smaller chunks
+    if available_memory_mb < 256 {
+        return 1024 * 1024; // 1MB
+    }
+    if available_memory_mb < 512 {
+        return 2 * 1024 * 1024; // 2MB
+    }
+    // Fall back to file-size-based selection
+    select_chunk_size(file_size)
 }
 
 /// Computes the number of chunks for a given file size and chunk size.

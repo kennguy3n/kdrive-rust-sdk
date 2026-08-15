@@ -1,5 +1,7 @@
 #![allow(clippy::type_complexity)]
 
+use std::io::Read;
+
 use aes_gcm::{
     Aes256Gcm, Nonce,
     aead::{Aead, KeyInit, Payload},
@@ -30,6 +32,22 @@ pub fn build_content_chunk_aad(
     aad.extend_from_slice(&chunk_index.to_be_bytes());
     aad.extend_from_slice(&plaintext_len.to_be_bytes());
     aad
+}
+
+/// Builds the content-layer chunk AAD into a reusable buffer, avoiding
+/// per-chunk allocation in streaming contexts.
+pub fn build_content_chunk_aad_into(
+    buf: &mut Vec<u8>,
+    content_id: &Hash256,
+    chunk_index: u64,
+    plaintext_len: u64,
+) {
+    buf.clear();
+    buf.extend_from_slice(&PROTOCOL_KDRV1.to_be_bytes());
+    buf.extend_from_slice(&SUITE_KDRV1.to_be_bytes());
+    buf.extend_from_slice(content_id.as_bytes());
+    buf.extend_from_slice(&chunk_index.to_be_bytes());
+    buf.extend_from_slice(&plaintext_len.to_be_bytes());
 }
 
 /// Encrypts a single content chunk with AES-256-GCM using derived key + nonce.
@@ -305,3 +323,77 @@ pub fn content_chunk_plan_root(chunk_plan: &ChunkPlan) -> Hash256 {
 
 // Re-export PROTOCOL_VERSION for AAD construction in callers.
 pub use kchat_drive_types::PROTOCOL_VERSION as KDRV1_PROTOCOL;
+
+/// Streaming content encryption: reads `chunk_size` bytes at a time from
+/// `reader`, encrypts each content chunk, and yields the ciphertext. Plaintext
+/// for each chunk is dropped after encryption, keeping peak memory bounded.
+///
+/// The caller must supply the precomputed `content_id` and `content_key`.
+pub fn encrypt_content_streaming<'a, R: Read>(
+    reader: &'a mut R,
+    content_key: &'a [u8; 32],
+    content_id: &'a Hash256,
+    chunk_size: usize,
+) -> impl Iterator<Item = Result<Vec<u8>, DriveError>> + 'a {
+    let mut chunk_index: u64 = 0;
+    // Reusable AAD buffer to avoid per-chunk allocation.
+    let mut aad_buf: Vec<u8> = Vec::new();
+    std::iter::from_fn(move || {
+        let mut buf = vec![0u8; chunk_size];
+        let mut read_total = 0;
+        while read_total < chunk_size {
+            match reader.read(&mut buf[read_total..]) {
+                Ok(0) => break,
+                Ok(n) => read_total += n,
+                Err(e) => return Some(Err(DriveError::Io(e.to_string()))),
+            }
+        }
+        if read_total == 0 {
+            return None;
+        }
+        buf.truncate(read_total);
+
+        // Build AAD into the reusable buffer.
+        build_content_chunk_aad_into(&mut aad_buf, content_id, chunk_index, buf.len() as u64);
+
+        let key_bytes = derive_content_chunk_key(content_key, chunk_index);
+        let nonce_bytes = derive_content_chunk_nonce(content_key, chunk_index);
+
+        let cipher = match Aes256Gcm::new_from_slice(&key_bytes) {
+            Ok(c) => c,
+            Err(e) => {
+                drop(buf);
+                return Some(Err(DriveError::Crypto(e.to_string())));
+            }
+        };
+        let nonce = Nonce::from_slice(&nonce_bytes);
+
+        let result = cipher
+            .encrypt(
+                nonce,
+                Payload {
+                    msg: &buf,
+                    aad: &aad_buf,
+                },
+            )
+            .map_err(|e| DriveError::Crypto(e.to_string()));
+        // Drop plaintext buffer before yielding.
+        drop(buf);
+        chunk_index += 1;
+        Some(result)
+    })
+}
+
+/// Streaming content decryption: decrypts each ciphertext chunk and yields the
+/// plaintext. The `chunks` iterator must yield ciphertexts in chunk-index
+/// order.
+pub fn decrypt_content_streaming<I: Iterator<Item = Vec<u8>>>(
+    chunks: I,
+    content_key: &[u8; 32],
+    content_id: &Hash256,
+) -> impl Iterator<Item = Result<Vec<u8>, DriveError>> {
+    chunks.enumerate().map(move |(idx, ct)| {
+        let chunk_index = idx as u64;
+        decrypt_content_chunk(content_key, content_id, chunk_index, &ct)
+    })
+}

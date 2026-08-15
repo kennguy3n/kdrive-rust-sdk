@@ -231,7 +231,7 @@ impl DriveFacade {
         let content_key = derive_content_key(&pt_hash, tenant_pepper);
 
         // 3. Check gateway for existing content
-        let content_check = transport.check_content(&content_id)?;
+        let mut content_check = transport.check_content(&content_id)?;
 
         let (chunk_plan, all_blob_keys, reused_blob_keys, new_blob_keys, new_ciphertexts);
 
@@ -257,7 +257,7 @@ impl DriveFacade {
 
             let mut chunks = Vec::with_capacity(n as usize);
             all_blob_keys = content_check.blob_keys.clone();
-            reused_blob_keys = content_check.blob_keys.clone();
+            reused_blob_keys = std::mem::take(&mut content_check.blob_keys);
             new_blob_keys = Vec::new();
             new_ciphertexts = Vec::new();
 

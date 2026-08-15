@@ -17,6 +17,9 @@ pub enum DriveSdkError {
 
     #[error("permission denied: {msg}")]
     PermissionDenied { msg: String },
+
+    #[error("invalid input: {msg}")]
+    InvalidInput { msg: String },
 }
 
 impl From<kchat_drive_types::DriveError> for DriveSdkError {

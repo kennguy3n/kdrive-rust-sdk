@@ -61,8 +61,23 @@ pub type DeviceId = OpaqueId;
 pub type TenantId = OpaqueId;
 
 /// 32-byte hash output (SHA-256).
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Encode, Decode)]
+#[derive(Debug, Clone, Hash, Encode, Decode)]
 pub struct Hash256(#[n(0)] pub [u8; 32]);
+
+impl PartialEq for Hash256 {
+    #[inline(never)]
+    fn eq(&self, other: &Self) -> bool {
+        // Constant-time comparison to avoid timing side channels.
+        let mut diff: u8 = 0;
+        for i in 0..32 {
+            diff |= self.0[i] ^ other.0[i];
+        }
+        // Prevent compiler from short-circuiting the comparison
+        std::hint::black_box(diff) == 0
+    }
+}
+
+impl Eq for Hash256 {}
 
 impl Hash256 {
     pub fn new(bytes: [u8; 32]) -> Self {
@@ -137,7 +152,7 @@ impl Key256 {
 }
 
 /// 12-byte AEAD nonce.
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
 pub struct Nonce12(#[n(0)] pub [u8; 12]);
 
 impl Nonce12 {
