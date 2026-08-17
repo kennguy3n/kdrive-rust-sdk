@@ -60,20 +60,29 @@ impl ClientRuntime {
     }
 
     pub fn vault(&self) -> std::sync::MutexGuard<'_, DriveKeyVault> {
-        self.vault.lock().unwrap()
+        self.vault
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn journal(&self) -> std::sync::MutexGuard<'_, OperationJournal> {
-        self.journal.lock().unwrap()
+        self.journal
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn barrier(&self) -> std::sync::MutexGuard<'_, EpochBarrier> {
-        self.barrier.lock().unwrap()
+        self.barrier
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
     }
 
     /// Locks a group for mutation (deny-by-default for Drive-bound groups).
     pub fn lock_group(&self, group_id: &str) -> Result<(), DriveError> {
-        let mut locked = self.locked_groups.lock().unwrap();
+        let mut locked = self
+            .locked_groups
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if locked.iter().any(|g| g == group_id) {
             return Err(DriveError::InvalidState(format!(
                 "group {} is already locked",
@@ -86,7 +95,10 @@ impl ClientRuntime {
 
     /// Unlocks a group.
     pub fn unlock_group(&self, group_id: &str) {
-        let mut locked = self.locked_groups.lock().unwrap();
+        let mut locked = self
+            .locked_groups
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         locked.retain(|g| g != group_id);
     }
 }

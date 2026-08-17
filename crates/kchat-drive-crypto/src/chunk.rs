@@ -4,12 +4,17 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
     aead::{Aead, KeyInit, Payload},
 };
+use hkdf::Hkdf;
 use sha2::{Digest, Sha256};
+use zeroize::{Zeroize, Zeroizing};
 
-use kchat_drive_types::{ChunkDescriptor, ChunkPlan, DomainId, DriveError, Hash256, NodeId, VersionId};
+use kchat_drive_types::{
+    ChunkDescriptor, ChunkPlan, DomainId, DriveError, Hash256, NodeId, VersionId,
+};
 
 use crate::kdf::{
-    chunk_count, derive_chunk_key, derive_chunk_nonce, extract_prk, select_chunk_size,
+    chunk_count, derive_chunk_key, derive_chunk_key_into, derive_chunk_nonce,
+    derive_chunk_nonce_into, extract_prk, select_chunk_size,
 };
 
 /// Chunk AAD = canonical CBOR of:
@@ -84,12 +89,12 @@ pub fn encrypt_chunk(
     aad: &[u8],
 ) -> Result<Vec<u8>, kchat_drive_types::DriveError> {
     let prk = extract_prk(version_dek);
-    let key_bytes = derive_chunk_key(&prk, node_id, version_id, chunk_index);
-    let nonce_bytes = derive_chunk_nonce(&prk, node_id, version_id, chunk_index);
+    let key_bytes = Zeroizing::new(derive_chunk_key(&prk, node_id, version_id, chunk_index)?);
+    let nonce_bytes = Zeroizing::new(derive_chunk_nonce(&prk, node_id, version_id, chunk_index)?);
 
-    let cipher = Aes256Gcm::new_from_slice(&key_bytes)
+    let cipher = Aes256Gcm::new_from_slice(&*key_bytes)
         .map_err(|e| kchat_drive_types::DriveError::Crypto(e.to_string()))?;
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = Nonce::from_slice(&*nonce_bytes);
 
     cipher
         .encrypt(
@@ -112,12 +117,12 @@ pub fn decrypt_chunk(
     aad: &[u8],
 ) -> Result<Vec<u8>, kchat_drive_types::DriveError> {
     let prk = extract_prk(version_dek);
-    let key_bytes = derive_chunk_key(&prk, node_id, version_id, chunk_index);
-    let nonce_bytes = derive_chunk_nonce(&prk, node_id, version_id, chunk_index);
+    let key_bytes = Zeroizing::new(derive_chunk_key(&prk, node_id, version_id, chunk_index)?);
+    let nonce_bytes = Zeroizing::new(derive_chunk_nonce(&prk, node_id, version_id, chunk_index)?);
 
-    let cipher = Aes256Gcm::new_from_slice(&key_bytes)
+    let cipher = Aes256Gcm::new_from_slice(&*key_bytes)
         .map_err(|e| kchat_drive_types::DriveError::Crypto(e.to_string()))?;
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = Nonce::from_slice(&*nonce_bytes);
 
     cipher
         .decrypt(
@@ -146,6 +151,15 @@ pub fn encrypt_file(
     let cs = select_chunk_size(plaintext.len() as u64);
     let n = chunk_count(plaintext.len() as u64, cs);
 
+    // Extract PRK once and reuse across all chunks.
+    let mut prk = extract_prk(version_dek);
+    let hkdf = Hkdf::<Sha256>::from_prk(prk.as_slice()).expect("valid PRK");
+
+    // Reusable buffers to avoid per-chunk allocation.
+    let mut key_info = Vec::new();
+    let mut nonce_info = Vec::new();
+    let mut aad_buf = Vec::new();
+
     let mut chunks = Vec::with_capacity(n as usize);
     let mut ciphertexts = Vec::with_capacity(n as usize);
 
@@ -155,7 +169,8 @@ pub fn encrypt_file(
         let chunk_plaintext = &plaintext[start..end];
         let plaintext_len = chunk_plaintext.len() as u64;
 
-        let aad = build_chunk_aad(
+        build_chunk_aad_into(
+            &mut aad_buf,
             protocol,
             suite,
             drive_id,
@@ -168,7 +183,34 @@ pub fn encrypt_file(
             access_context_snapshot_hash,
         );
 
-        let ct = encrypt_chunk(version_dek, node_id, version_id, i, chunk_plaintext, &aad)?;
+        // Derive chunk key using reusable info buffer.
+        derive_chunk_key_into(node_id, version_id, i, &mut key_info);
+        let mut key_bytes = [0u8; 32];
+        hkdf.expand(&key_info, &mut key_bytes)
+            .expect("32 bytes is valid");
+
+        // Derive chunk nonce using reusable info buffer.
+        derive_chunk_nonce_into(node_id, version_id, i, &mut nonce_info);
+        let mut nonce_bytes = [0u8; 12];
+        hkdf.expand(&nonce_info, &mut nonce_bytes)
+            .expect("12 bytes is valid");
+
+        let cipher = Aes256Gcm::new_from_slice(&key_bytes)
+            .map_err(|e| kchat_drive_types::DriveError::Crypto(e.to_string()))?;
+        let nonce = Nonce::from_slice(&nonce_bytes);
+
+        let ct = cipher
+            .encrypt(
+                nonce,
+                Payload {
+                    msg: chunk_plaintext,
+                    aad: &aad_buf,
+                },
+            )
+            .map_err(|e| kchat_drive_types::DriveError::Crypto(e.to_string()))?;
+
+        key_bytes.zeroize();
+
         let ct_hash = {
             let mut hasher = Sha256::new();
             hasher.update(&ct);
@@ -185,6 +227,8 @@ pub fn encrypt_file(
         });
         ciphertexts.push(ct);
     }
+
+    prk.zeroize();
 
     Ok((ChunkPlan { chunks }, ciphertexts))
 }
@@ -212,10 +256,27 @@ pub fn decrypt_file(
         )));
     }
 
-    let mut plaintext = Vec::new();
+    // Extract PRK once and reuse across all chunks.
+    let mut prk = extract_prk(version_dek);
+    let hkdf = Hkdf::<Sha256>::from_prk(prk.as_slice()).expect("valid PRK");
+
+    // Reusable buffers to avoid per-chunk allocation.
+    let mut key_info = Vec::new();
+    let mut nonce_info = Vec::new();
+    let mut aad_buf = Vec::new();
+
+    // Pre-allocate plaintext buffer: total plaintext size is the sum of each
+    // chunk's plaintext_len from the chunk plan (avoids repeated reallocs).
+    let total_plaintext_size: u64 = chunk_plan
+        .chunks
+        .iter()
+        .map(|c| c.plaintext_len)
+        .sum();
+    let mut plaintext = Vec::with_capacity(total_plaintext_size as usize);
     for (i, ct) in ciphertexts.iter().enumerate() {
         let desc = &chunk_plan.chunks[i];
-        let aad = build_chunk_aad(
+        build_chunk_aad_into(
+            &mut aad_buf,
             protocol,
             suite,
             drive_id,
@@ -228,9 +289,38 @@ pub fn decrypt_file(
             access_context_snapshot_hash,
         );
 
-        let pt = decrypt_chunk(version_dek, node_id, version_id, desc.index, ct, &aad)?;
+        // Derive chunk key using reusable info buffer.
+        derive_chunk_key_into(node_id, version_id, desc.index, &mut key_info);
+        let mut key_bytes = [0u8; 32];
+        hkdf.expand(&key_info, &mut key_bytes)
+            .expect("32 bytes is valid");
+
+        // Derive chunk nonce using reusable info buffer.
+        derive_chunk_nonce_into(node_id, version_id, desc.index, &mut nonce_info);
+        let mut nonce_bytes = [0u8; 12];
+        hkdf.expand(&nonce_info, &mut nonce_bytes)
+            .expect("12 bytes is valid");
+
+        let cipher = Aes256Gcm::new_from_slice(&key_bytes)
+            .map_err(|e| kchat_drive_types::DriveError::Crypto(e.to_string()))?;
+        let nonce = Nonce::from_slice(&nonce_bytes);
+
+        let pt = cipher
+            .decrypt(
+                nonce,
+                Payload {
+                    msg: ct,
+                    aad: &aad_buf,
+                },
+            )
+            .map_err(|e| kchat_drive_types::DriveError::Crypto(e.to_string()))?;
+
+        key_bytes.zeroize();
+
         plaintext.extend_from_slice(&pt);
     }
+
+    prk.zeroize();
 
     Ok(plaintext)
 }
@@ -333,13 +423,6 @@ pub fn decrypt_file_streaming<I: Iterator<Item = Vec<u8>>>(
             access_context_revision,
             access_context_snapshot_hash,
         );
-        decrypt_chunk(
-            version_dek,
-            node_id,
-            version_id,
-            chunk_index,
-            &ct,
-            &aad_buf,
-        )
+        decrypt_chunk(version_dek, node_id, version_id, chunk_index, &ct, &aad_buf)
     })
 }

@@ -212,6 +212,15 @@ pub fn dedup_upload(
         }
     };
 
+    // Reject oversized inputs before hex-decoding to avoid unbounded memory allocation.
+    // 1 GB decoded = 2 GB hex characters.
+    if plaintext_hex.len() > 2_000_000_000 {
+        return Err(crate::error::js_error(
+            "InvalidInput",
+            "plaintext_hex exceeds 1 GB decoded limit",
+        ));
+    }
+
     let plaintext = hex::decode(plaintext_hex).map_err(|e| {
         crate::error::js_error("InvalidInput", format!("invalid plaintext_hex: {}", e))
     })?;

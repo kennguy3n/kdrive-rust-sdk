@@ -257,6 +257,305 @@ pub fn get_test_vectors_json() -> String {
     kchat_drive_crypto::vector::all_vectors_json()
 }
 
+/// Generate a DomainKey. Returns JSON { domain_key_hex, generation }.
+#[uniffi::export]
+pub fn generate_domain_key(domain_id_hex: String) -> Result<String, DriveSdkError> {
+    let domain_id = kchat_drive_types::DomainId::from_hex(&domain_id_hex)?;
+    let record = kchat_drive_crypto::generate_domain_key(domain_id);
+    let result = serde_json::json!({
+        "domain_key_hex": hex::encode(record.key.as_bytes()),
+        "generation": record.generation,
+    });
+    Ok(result.to_string())
+}
+
+/// Generate a ShareGrantKey. Returns JSON { share_grant_key_hex, generation }.
+#[uniffi::export]
+pub fn generate_share_grant_key(
+    grant_id_hex: String,
+    recipients_json: String,
+    user_snapshot_hash_hex: String,
+    mls_epoch: u64,
+    mls_tree_hash_hex: String,
+) -> Result<String, DriveSdkError> {
+    let grant_id = kchat_drive_types::ShareGrantId::from_hex(&grant_id_hex)?;
+    let recipients: Vec<String> = serde_json::from_str(&recipients_json).map_err(|e| {
+        DriveSdkError::InvalidInput {
+            msg: format!("invalid recipients: {}", e),
+        }
+    })?;
+    let recipients: Vec<kchat_drive_types::UserId> = recipients
+        .iter()
+        .map(|s| kchat_drive_types::UserId::from_hex(s))
+        .collect::<Result<_, _>>()?;
+    let snapshot_hash = hex::decode(&user_snapshot_hash_hex).map_err(|e| {
+        DriveSdkError::InvalidState {
+            msg: format!("invalid snapshot_hash: {}", e),
+        }
+    })?;
+    let snapshot_hash: [u8; 32] =
+        snapshot_hash
+            .as_slice()
+            .try_into()
+            .map_err(|_| DriveSdkError::InvalidState {
+                msg: "snapshot_hash must be 32 bytes".into(),
+            })?;
+    let tree_hash = hex::decode(&mls_tree_hash_hex).map_err(|e| DriveSdkError::InvalidState {
+        msg: format!("invalid tree_hash: {}", e),
+    })?;
+    let tree_hash: [u8; 32] =
+        tree_hash
+            .as_slice()
+            .try_into()
+            .map_err(|_| DriveSdkError::InvalidState {
+                msg: "tree_hash must be 32 bytes".into(),
+            })?;
+
+    let record = kchat_drive_crypto::generate_share_grant_key(
+        grant_id,
+        &recipients,
+        &kchat_drive_types::Hash256::new(snapshot_hash),
+        mls_epoch,
+        &kchat_drive_types::Hash256::new(tree_hash),
+    );
+
+    let result = serde_json::json!({
+        "share_grant_key_hex": hex::encode(record.key.as_bytes()),
+        "generation": record.generation,
+    });
+    Ok(result.to_string())
+}
+
+/// Wrap a version DEK under a domain key. Returns JSON { wrapped_dek_hex, wrap_nonce_hex }.
+#[uniffi::export]
+pub fn wrap_dek_under_domain_key(
+    domain_key_hex: String,
+    version_dek_hex: String,
+) -> Result<String, DriveSdkError> {
+    let dk = hex::decode(&domain_key_hex).map_err(|e| DriveSdkError::InvalidState {
+        msg: format!("invalid domain_key: {}", e),
+    })?;
+    let dk: [u8; 32] =
+        dk.as_slice()
+            .try_into()
+            .map_err(|_| DriveSdkError::InvalidState {
+                msg: "domain_key must be 32 bytes".into(),
+            })?;
+    let dek = hex::decode(&version_dek_hex).map_err(|e| DriveSdkError::InvalidState {
+        msg: format!("invalid version_dek: {}", e),
+    })?;
+    let dek: [u8; 32] =
+        dek.as_slice()
+            .try_into()
+            .map_err(|_| DriveSdkError::InvalidState {
+                msg: "version_dek must be 32 bytes".into(),
+            })?;
+
+    let domain_key = kchat_drive_types::Key256::new(dk);
+    let (wrapped, nonce) =
+        kchat_drive_crypto::wrap_version_dek_under_domain_key(&domain_key, &dek)?;
+
+    let result = serde_json::json!({
+        "wrapped_dek_hex": hex::encode(&wrapped),
+        "wrap_nonce_hex": hex::encode(nonce.as_bytes()),
+    });
+    Ok(result.to_string())
+}
+
+/// Unwrap a version DEK from a domain key. Returns the DEK hex.
+#[uniffi::export]
+pub fn unwrap_dek_from_domain_key(
+    domain_key_hex: String,
+    wrapped_dek_hex: String,
+    wrap_nonce_hex: String,
+) -> Result<String, DriveSdkError> {
+    let dk = hex::decode(&domain_key_hex).map_err(|e| DriveSdkError::InvalidState {
+        msg: format!("invalid domain_key: {}", e),
+    })?;
+    let dk: [u8; 32] =
+        dk.as_slice()
+            .try_into()
+            .map_err(|_| DriveSdkError::InvalidState {
+                msg: "domain_key must be 32 bytes".into(),
+            })?;
+    let wrapped = hex::decode(&wrapped_dek_hex).map_err(|e| DriveSdkError::InvalidState {
+        msg: format!("invalid wrapped_dek: {}", e),
+    })?;
+    let nonce_bytes = hex::decode(&wrap_nonce_hex).map_err(|e| DriveSdkError::InvalidState {
+        msg: format!("invalid wrap_nonce: {}", e),
+    })?;
+    let nonce_bytes: [u8; 12] =
+        nonce_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| DriveSdkError::InvalidState {
+                msg: "wrap_nonce must be 12 bytes".into(),
+            })?;
+
+    let domain_key = kchat_drive_types::Key256::new(dk);
+    let dek = kchat_drive_crypto::unwrap_version_dek_from_domain_key(
+        &domain_key,
+        &wrapped,
+        &kchat_drive_types::Nonce12::new(nonce_bytes),
+    )?;
+    Ok(hex::encode(dek))
+}
+
+/// Wrap a version DEK under a share grant key. Returns JSON { wrapped_dek_hex, wrap_nonce_hex }.
+#[uniffi::export]
+pub fn wrap_dek_under_share_grant_key(
+    share_grant_key_hex: String,
+    version_dek_hex: String,
+) -> Result<String, DriveSdkError> {
+    let sgk = hex::decode(&share_grant_key_hex).map_err(|e| DriveSdkError::InvalidState {
+        msg: format!("invalid share_grant_key: {}", e),
+    })?;
+    let sgk: [u8; 32] =
+        sgk.as_slice()
+            .try_into()
+            .map_err(|_| DriveSdkError::InvalidState {
+                msg: "share_grant_key must be 32 bytes".into(),
+            })?;
+    let dek = hex::decode(&version_dek_hex).map_err(|e| DriveSdkError::InvalidState {
+        msg: format!("invalid version_dek: {}", e),
+    })?;
+    let dek: [u8; 32] =
+        dek.as_slice()
+            .try_into()
+            .map_err(|_| DriveSdkError::InvalidState {
+                msg: "version_dek must be 32 bytes".into(),
+            })?;
+
+    let share_grant_key = kchat_drive_types::Key256::new(sgk);
+    let (wrapped, nonce) =
+        kchat_drive_crypto::wrap_version_dek_under_share_grant_key(&share_grant_key, &dek)?;
+
+    let result = serde_json::json!({
+        "wrapped_dek_hex": hex::encode(&wrapped),
+        "wrap_nonce_hex": hex::encode(nonce.as_bytes()),
+    });
+    Ok(result.to_string())
+}
+
+/// Unwrap a version DEK from a share grant key. Returns the DEK hex.
+#[uniffi::export]
+pub fn unwrap_dek_from_share_grant_key(
+    share_grant_key_hex: String,
+    wrapped_dek_hex: String,
+    wrap_nonce_hex: String,
+) -> Result<String, DriveSdkError> {
+    let sgk = hex::decode(&share_grant_key_hex).map_err(|e| DriveSdkError::InvalidState {
+        msg: format!("invalid share_grant_key: {}", e),
+    })?;
+    let sgk: [u8; 32] =
+        sgk.as_slice()
+            .try_into()
+            .map_err(|_| DriveSdkError::InvalidState {
+                msg: "share_grant_key must be 32 bytes".into(),
+            })?;
+    let wrapped = hex::decode(&wrapped_dek_hex).map_err(|e| DriveSdkError::InvalidState {
+        msg: format!("invalid wrapped_dek: {}", e),
+    })?;
+    let nonce_bytes = hex::decode(&wrap_nonce_hex).map_err(|e| DriveSdkError::InvalidState {
+        msg: format!("invalid wrap_nonce: {}", e),
+    })?;
+    let nonce_bytes: [u8; 12] =
+        nonce_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| DriveSdkError::InvalidState {
+                msg: "wrap_nonce must be 12 bytes".into(),
+            })?;
+
+    let share_grant_key = kchat_drive_types::Key256::new(sgk);
+    let dek = kchat_drive_crypto::unwrap_version_dek_from_share_grant_key(
+        &share_grant_key,
+        &wrapped,
+        &kchat_drive_types::Nonce12::new(nonce_bytes),
+    )?;
+    Ok(hex::encode(dek))
+}
+
+/// Compute SHA-256 of the given data and return the hex-encoded digest.
+#[uniffi::export]
+pub fn sha256_hex(data: Vec<u8>) -> String {
+    use sha2::Digest;
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(&data);
+    hex::encode(hasher.finalize())
+}
+
+/// Sign a version header with an Ed25519 signing key. Returns the signature hex.
+#[uniffi::export]
+pub fn sign_header_hex(
+    header_cbor_hex: String,
+    signing_key_hex: String,
+) -> Result<String, DriveSdkError> {
+    let header_bytes = hex::decode(&header_cbor_hex).map_err(|e| DriveSdkError::InvalidState {
+        msg: format!("invalid header_cbor: {}", e),
+    })?;
+    let header: kchat_drive_types::PublicVersionHeader =
+        minicbor::decode(&header_bytes).map_err(|e| DriveSdkError::InvalidState {
+            msg: format!("invalid header: {}", e),
+        })?;
+    let sk_bytes = hex::decode(&signing_key_hex).map_err(|e| DriveSdkError::InvalidState {
+        msg: format!("invalid signing_key: {}", e),
+    })?;
+    let sk_bytes: [u8; 32] =
+        sk_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| DriveSdkError::InvalidState {
+                msg: "signing_key must be 32 bytes".into(),
+            })?;
+    let signing_key = ed25519_dalek::SigningKey::from_bytes(&sk_bytes);
+
+    let sig = kchat_drive_crypto::sign_header(&header, &signing_key)?;
+    Ok(hex::encode(sig.as_bytes()))
+}
+
+/// Verify a signed version header against an Ed25519 verifying key.
+#[uniffi::export]
+pub fn verify_header_hex(
+    header_cbor_hex: String,
+    signature_hex: String,
+    verifying_key_hex: String,
+) -> Result<bool, DriveSdkError> {
+    let header_bytes = hex::decode(&header_cbor_hex).map_err(|e| DriveSdkError::InvalidState {
+        msg: format!("invalid header_cbor: {}", e),
+    })?;
+    let mut header: kchat_drive_types::PublicVersionHeader =
+        minicbor::decode(&header_bytes).map_err(|e| DriveSdkError::InvalidState {
+            msg: format!("invalid header: {}", e),
+        })?;
+    let sig_bytes = hex::decode(&signature_hex).map_err(|e| DriveSdkError::InvalidState {
+        msg: format!("invalid signature: {}", e),
+    })?;
+    let sig_bytes: [u8; 64] =
+        sig_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| DriveSdkError::InvalidState {
+                msg: "signature must be 64 bytes".into(),
+            })?;
+    header.signature = Some(kchat_drive_types::Ed25519Signature::new(sig_bytes));
+
+    let vk_bytes = hex::decode(&verifying_key_hex).map_err(|e| DriveSdkError::InvalidState {
+        msg: format!("invalid verifying_key: {}", e),
+    })?;
+    let vk_bytes: [u8; 32] =
+        vk_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| DriveSdkError::InvalidState {
+                msg: "verifying_key must be 32 bytes".into(),
+            })?;
+
+    let pk = kchat_drive_types::Ed25519PublicKey::new(vk_bytes);
+    let valid = kchat_drive_crypto::verify_header(&header, &pk)?;
+    Ok(valid)
+}
+
 // --- KDRV1 Drive Runtime (pepper management) ---
 
 /// Persistent Drive runtime for iOS/Android.
@@ -284,10 +583,8 @@ impl DriveRuntimeFfi {
                 rand::rngs::OsRng.fill_bytes(&mut key);
                 key
             } else {
-                let bytes = hex::decode(hex_str).map_err(|e| {
-                    DriveSdkError::InvalidInput {
-                        msg: format!("invalid master_key hex: {}", e),
-                    }
+                let bytes = hex::decode(hex_str).map_err(|e| DriveSdkError::InvalidInput {
+                    msg: format!("invalid master_key hex: {}", e),
                 })?;
                 if bytes.len() != 32 {
                     return Err(DriveSdkError::InvalidInput {
@@ -398,7 +695,7 @@ impl DriveRuntimeFfi {
     /// Returns the master key hex (for persistence across app sessions).
     pub fn export_master_key(&self) -> Result<String, DriveSdkError> {
         let vault = self.runtime.vault();
-        Ok(hex::encode(vault.master_key()))
+        Ok(hex::encode(&*vault.master_key()))
     }
 
     /// Seals the tenant pepper using MLS exporter-derived transport key.
@@ -436,12 +733,12 @@ impl DriveRuntimeFfi {
         let tree_hash = kchat_drive_types::Hash256::from_slice(&tree_hash_bytes);
         let envelope_id = kchat_drive_types::EnvelopeId::from_hex(&envelope_id_hex)?;
 
-        let context = kchat_drive_mls_bridge::context::AdvancedTransportContext {
+        let context = kchat_drive_mls_bridge::context::AdvancedTransportContext::new(
             domain_id,
             generation,
             mls_epoch,
-            mls_tree_hash: tree_hash,
-        };
+            tree_hash,
+        );
 
         let (ct, nonce) = kchat_drive_mls_bridge::pepper::seal_pepper_via_mls(
             &exporter_out,
@@ -504,12 +801,12 @@ impl DriveRuntimeFfi {
         let tree_hash = kchat_drive_types::Hash256::from_slice(&tree_hash_bytes);
         let envelope_id = kchat_drive_types::EnvelopeId::from_hex(&envelope_id_hex)?;
 
-        let context = kchat_drive_mls_bridge::context::AdvancedTransportContext {
+        let context = kchat_drive_mls_bridge::context::AdvancedTransportContext::new(
             domain_id,
             generation,
             mls_epoch,
-            mls_tree_hash: tree_hash,
-        };
+            tree_hash,
+        );
 
         let pepper = kchat_drive_mls_bridge::pepper::open_pepper_via_mls(
             &exporter_out,

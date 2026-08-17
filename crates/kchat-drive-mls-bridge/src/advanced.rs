@@ -33,7 +33,7 @@ pub fn seal_advanced_domain_key<Provider: OpenMlsProvider>(
     // Call the MLS exporter.
     let exporter_output = zeroize::Zeroizing::new(
         group
-            .export_secret(provider.crypto(), label, &context_bytes, 32)
+            .export_secret(provider.crypto(), label, context_bytes, 32)
             .map_err(|e| DriveError::MlsBridge(format!("export_secret: {}", e)))?,
     );
 
@@ -48,7 +48,7 @@ pub fn seal_advanced_domain_key<Provider: OpenMlsProvider>(
         ADVANCED_PURPOSE,
         &context_hash,
         &envelope_id,
-    );
+    )?;
 
     // Seal the DomainKey under the transport key.
     let envelope = create_mls_transport_envelope(
@@ -92,7 +92,7 @@ pub fn open_advanced_domain_key_and_store<Provider: OpenMlsProvider>(
     // Call the MLS exporter.
     let exporter_output = zeroize::Zeroizing::new(
         group
-            .export_secret(provider.crypto(), label, &context_bytes, 32)
+            .export_secret(provider.crypto(), label, context_bytes, 32)
             .map_err(|e| DriveError::MlsBridge(format!("export_secret: {}", e)))?,
     );
 
@@ -110,7 +110,7 @@ pub fn open_advanced_domain_key_and_store<Provider: OpenMlsProvider>(
         ADVANCED_PURPOSE,
         &context_hash,
         &envelope.envelope_id,
-    );
+    )?;
 
     // Open the envelope.
     let key_bytes = open_mls_transport_envelope(envelope, &transport_key)?;

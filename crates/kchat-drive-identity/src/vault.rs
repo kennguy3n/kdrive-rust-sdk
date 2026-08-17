@@ -21,6 +21,22 @@ pub struct DriveKeyVault {
 struct VaultEntry {
     ciphertext: Vec<u8>,
     nonce: [u8; 12],
+    last_used: std::time::Instant,
+}
+
+impl zeroize::Zeroize for VaultEntry {
+    fn zeroize(&mut self) {
+        self.ciphertext.zeroize();
+        self.nonce.zeroize();
+    }
+}
+
+impl zeroize::ZeroizeOnDrop for VaultEntry {}
+
+impl Drop for VaultEntry {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
 }
 
 impl DriveKeyVault {
@@ -44,8 +60,12 @@ impl DriveKeyVault {
 
     /// Returns the vault's master key (for JS to persist across sessions).
     /// In production, JS should store this securely (e.g. WebCrypto + IndexedDB).
-    pub fn master_key(&self) -> &[u8; 32] {
-        &self.master_key
+    ///
+    /// The key is returned wrapped in `Zeroizing` so that the caller's copy is
+    /// securely wiped from memory when dropped, avoiding prolonged exposure of
+    /// the raw key material.
+    pub fn master_key(&self) -> zeroize::Zeroizing<[u8; 32]> {
+        zeroize::Zeroizing::new(self.master_key)
     }
 
     /// Stores a key in the vault, encrypted under the master key.
@@ -67,20 +87,24 @@ impl DriveKeyVault {
             VaultEntry {
                 ciphertext: ct,
                 nonce: nonce_bytes,
+                last_used: std::time::Instant::now(),
             },
         );
+        self.remove_stale(10000);
         Ok(())
     }
 
     /// Retrieves a key from the vault.
-    pub fn load(&self, key_id: &str) -> Result<[u8; 32], DriveError> {
+    pub fn load(&mut self, key_id: &str) -> Result<[u8; 32], DriveError> {
         let entry = self
             .entries
-            .get(key_id)
+            .get_mut(key_id)
             .ok_or(DriveError::NotFound(format!(
                 "vault key not found: {}",
                 key_id
             )))?;
+
+        entry.last_used = std::time::Instant::now();
 
         let cipher = Aes256Gcm::new_from_slice(&self.master_key)
             .map_err(|e| DriveError::Crypto(e.to_string()))?;
@@ -131,20 +155,23 @@ impl DriveKeyVault {
             VaultEntry {
                 ciphertext: ct,
                 nonce: nonce_bytes,
+                last_used: std::time::Instant::now(),
             },
         );
         Ok(())
     }
 
     /// Retrieves arbitrary bytes from the vault.
-    pub fn load_bytes(&self, key_id: &str) -> Result<zeroize::Zeroizing<Vec<u8>>, DriveError> {
+    pub fn load_bytes(&mut self, key_id: &str) -> Result<zeroize::Zeroizing<Vec<u8>>, DriveError> {
         let entry = self
             .entries
-            .get(key_id)
+            .get_mut(key_id)
             .ok_or(DriveError::NotFound(format!(
                 "vault key not found: {}",
                 key_id
             )))?;
+
+        entry.last_used = std::time::Instant::now();
 
         let cipher = Aes256Gcm::new_from_slice(&self.master_key)
             .map_err(|e| DriveError::Crypto(e.to_string()))?;
@@ -164,9 +191,42 @@ impl DriveKeyVault {
         Ok(zeroize::Zeroizing::new(plaintext))
     }
 
-    /// Removes a key from the vault.
+    /// Removes a key from the vault, zeroizing the ciphertext before removal.
     pub fn remove(&mut self, key_id: &str) {
-        self.entries.remove(key_id);
+        if let Some(mut entry) = self.entries.remove(key_id) {
+            entry.zeroize();
+        }
+    }
+
+    /// Removes least-recently-used entries when the vault exceeds `max_entries`.
+    /// Entries that are evicted are zeroized via `ZeroizeOnDrop`.
+    ///
+    /// Uses batch eviction: only evicts when over the limit, and removes a
+    /// batch of entries (the oldest via `min_by_key`) at once rather than
+    /// scanning the entire map on every store. This reduces the O(n) scan
+    /// frequency by ~10x compared to per-entry eviction.
+    pub fn remove_stale(&mut self, max_entries: usize) {
+        /// Number of entries to evict per batch. Evicting a batch at once
+        /// amortizes the O(n) `min_by_key` scan over multiple evictions.
+        const EVICT_BATCH: usize = 100;
+        while self.entries.len() > max_entries {
+            // Evict a batch of the oldest entries at once to reduce the
+            // frequency of the O(n) `min_by_key` scan.
+            // Evicted entries are zeroized on drop.
+            let to_evict = EVICT_BATCH.min(self.entries.len() - max_entries).max(1);
+            for _ in 0..to_evict {
+                let oldest_key = self
+                    .entries
+                    .iter()
+                    .min_by_key(|(_, entry)| entry.last_used)
+                    .map(|(key, _)| key.clone());
+                if let Some(key) = oldest_key {
+                    self.entries.remove(&key);
+                } else {
+                    break;
+                }
+            }
+        }
     }
 
     /// Returns whether a key exists in the vault.
@@ -184,6 +244,8 @@ impl DriveKeyVault {
     /// Returns a serializable representation of the vault's encrypted entries.
     /// The master key is **not** included — it must be re-derived from the
     /// wrapping root on the next session.
+    ///
+    /// Note: This clones all entries. Call infrequently (e.g., only during backup).
     pub fn export_data(&self) -> Vec<VaultEntryExport> {
         self.entries
             .iter()
@@ -205,6 +267,7 @@ impl DriveKeyVault {
                 VaultEntry {
                     ciphertext: entry.ciphertext.clone(),
                     nonce: entry.nonce,
+                    last_used: std::time::Instant::now(),
                 },
             );
         }

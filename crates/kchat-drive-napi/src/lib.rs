@@ -386,7 +386,9 @@ pub fn decrypt_file_json(
                 let ct_hash = hex::decode(ct_hash_hex)
                     .map_err(|e| invalid_input(format!("invalid ciphertextSha256: {}", e)))?;
                 if ct_hash.len() != 32 {
-                    return Err(invalid_input("ciphertextSha256 must be 32 bytes".to_string()));
+                    return Err(invalid_input(
+                        "ciphertextSha256 must be 32 bytes".to_string(),
+                    ));
                 }
                 Ok(kchat_drive_types::ChunkDescriptor {
                     index: c["index"].as_u64().unwrap_or(0),
@@ -403,7 +405,9 @@ pub fn decrypt_file_json(
         .map_err(|e| invalid_input(format!("invalid ciphertexts_hex_json: {}", e)))?;
     let ciphertexts: Vec<Vec<u8>> = ct_hex_arr
         .iter()
-        .map(|h| hex::decode(h).map_err(|e| invalid_input(format!("invalid ciphertext hex: {}", e))))
+        .map(|h| {
+            hex::decode(h).map_err(|e| invalid_input(format!("invalid ciphertext hex: {}", e)))
+        })
         .collect::<Result<_, _>>()?;
 
     let plaintext = kchat_drive_crypto::decrypt_file(
@@ -500,9 +504,8 @@ pub fn wrap_dek_under_domain_key_napi(
         .map_err(|_| invalid_input("version_dek must be 32 bytes".to_string()))?;
 
     let domain_key = kchat_drive_types::Key256::new(dk);
-    let (wrapped, nonce) =
-        kchat_drive_crypto::wrap_version_dek_under_domain_key(&domain_key, &dek)
-            .map_err(to_napi_error)?;
+    let (wrapped, nonce) = kchat_drive_crypto::wrap_version_dek_under_domain_key(&domain_key, &dek)
+        .map_err(to_napi_error)?;
 
     let result = serde_json::json!({
         "wrapped_dek_hex": hex::encode(&wrapped),

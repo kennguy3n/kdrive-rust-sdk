@@ -174,7 +174,7 @@ impl DriveFacade {
 
         // Sign the header.
         let sig = sign_header(&header, signing_key)?;
-        let mut signed_header = header.clone();
+        let mut signed_header = header;
         signed_header.signature = Some(sig);
 
         // Store VersionDEK in vault.
@@ -221,7 +221,7 @@ impl DriveFacade {
         transport: &dyn DedupTransport,
     ) -> Result<DedupUploadResult, DriveError> {
         let version_id = VersionId::random();
-        let version_dek = generate_key();
+        let version_dek = zeroize::Zeroizing::new(generate_key());
 
         // 1. Compute plaintext hash + content_id
         let pt_hash = plaintext_sha256(plaintext);
@@ -256,7 +256,7 @@ impl DriveFacade {
             }
 
             let mut chunks = Vec::with_capacity(n as usize);
-            all_blob_keys = content_check.blob_keys.clone();
+            // Use the original blob_keys for reused; clone for all_blob_keys after the loop.
             reused_blob_keys = std::mem::take(&mut content_check.blob_keys);
             new_blob_keys = Vec::new();
             new_ciphertexts = Vec::new();
@@ -278,10 +278,11 @@ impl DriveFacade {
                     plaintext_len,
                     ciphertext_len: 0, // Not needed for deduped chunks
                     ciphertext_sha256: ct_hash,
-                    blob_key: content_check.blob_keys[idx].clone(),
+                    blob_key: reused_blob_keys[idx].clone(),
                 });
             }
             chunk_plan = kchat_drive_types::ChunkPlan { chunks };
+            all_blob_keys = reused_blob_keys.clone();
         } else {
             // No full dedup — encrypt all chunks with ContentKey
             let (plan, cts, _, _) = encrypt_content_file(plaintext, tenant_pepper)?;
@@ -346,25 +347,28 @@ impl DriveFacade {
         }
 
         let chunk_plan_root = content_chunk_plan_root(&chunk_plan);
+        let chunk_count = chunk_plan.chunks.len() as u64;
         let fully_deduped = new_ciphertexts.is_empty();
 
         // 6. Wrap ContentKey under VersionDEK
         let (wrapped_content_key, content_wrap_nonce) =
-            wrap_content_key(&version_dek, &version_id, &content_id, &content_key)?;
+            wrap_content_key(&*version_dek, &version_id, &content_id, &content_key)?;
 
         // 7. Wrap VersionDEK under mode's wrapping key
         let (wrapped_dek, wrap_nonce) = match privacy_mode {
             PrivacyMode::Secured | PrivacyMode::Advanced => {
-                wrap_version_dek_under_domain_key(wrapping_key, &version_dek)?
+                wrap_version_dek_under_domain_key(wrapping_key, &*version_dek)?
             }
-            PrivacyMode::Max => wrap_version_dek_under_share_grant_key(wrapping_key, &version_dek)?,
+            PrivacyMode::Max => {
+                wrap_version_dek_under_share_grant_key(wrapping_key, &*version_dek)?
+            }
         };
 
-        // 8. Build KDRV1 manifest
+        // 8. Build KDRV1 manifest (move chunk_plan to avoid clone)
         let manifest = kchat_drive_types::Manifest {
             version_id: version_id.clone(),
             node_id: node_id.clone(),
-            chunk_plan: chunk_plan.clone(),
+            chunk_plan,
             name_ciphertext: vec![],
             mime_type: None,
             plaintext_size: plaintext.len() as u64,
@@ -379,7 +383,7 @@ impl DriveFacade {
         };
 
         let (manifest_ct, manifest_nonce) =
-            encrypt_manifest(&version_dek, node_id, &version_id, &manifest)?;
+            encrypt_manifest(&*version_dek, node_id, &version_id, &manifest)?;
 
         let manifest_sha = kchat_drive_crypto::sha256(&manifest_ct);
 
@@ -394,7 +398,7 @@ impl DriveFacade {
             privacy_mode,
             plaintext_size: plaintext.len() as u64,
             chunk_size: select_chunk_size(plaintext.len() as u64),
-            chunk_count: chunk_plan.chunks.len() as u64,
+            chunk_count,
             chunk_plan_root: chunk_plan_root.clone(),
             manifest_ciphertext_sha256: manifest_sha,
             manifest_ciphertext_len: manifest_ct.len() as u64,
@@ -411,12 +415,12 @@ impl DriveFacade {
         };
 
         let sig = sign_header(&header, signing_key)?;
-        let mut signed_header = header.clone();
+        let mut signed_header = header;
         signed_header.signature = Some(sig);
 
         // Store VersionDEK in vault
         let vault_key_id = format!("version_dek:{}", version_id);
-        self.runtime.vault().store(&vault_key_id, &version_dek)?;
+        self.runtime.vault().store(&vault_key_id, &*version_dek)?;
 
         // Store ContentKey in vault (keyed by content_id for reuse)
         let content_vault_key = format!("content_key:{}", content_id);
@@ -428,7 +432,7 @@ impl DriveFacade {
             version_id,
             content_id,
             chunk_plan_root,
-            chunk_count: chunk_plan.chunks.len() as u64,
+            chunk_count,
             manifest_ciphertext: manifest_ct,
             manifest_nonce,
             header: signed_header,

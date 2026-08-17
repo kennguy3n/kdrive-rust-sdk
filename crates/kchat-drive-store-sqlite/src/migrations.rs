@@ -52,11 +52,57 @@ CREATE TABLE IF NOT EXISTS share_grant_keys (
     mls_tree_hash       BLOB NOT NULL,
     PRIMARY KEY (grant_id, generation)
 );
+
+-- Indexes for common query patterns.
+CREATE INDEX IF NOT EXISTS idx_journal_node_id     ON journal(node_id);
+CREATE INDEX IF NOT EXISTS idx_journal_version_id  ON journal(version_id);
+CREATE INDEX IF NOT EXISTS idx_journal_status       ON journal(status);
+CREATE INDEX IF NOT EXISTS idx_sync_state_node_id  ON sync_state(node_id);
+CREATE INDEX IF NOT EXISTS idx_domain_keys_domain_id     ON domain_keys(domain_id);
+CREATE INDEX IF NOT EXISTS idx_share_grant_keys_grant_id ON share_grant_keys(grant_id);
+"#;
+
+/// Schema V2: adds composite indexes for common query patterns.
+const SCHEMA_V2: &str = r#"
+-- Composite index for journal cleanup queries that filter by status and timestamp.
+CREATE INDEX IF NOT EXISTS idx_journal_status_timestamp ON journal(status, timestamp);
+
+-- Composite index for domain key lookups by domain + generation.
+CREATE INDEX IF NOT EXISTS idx_domain_keys_domain_gen ON domain_keys(domain_id, generation);
+"#;
+
+/// Schema V3: adds index for sync_state cleanup queries by last_sync.
+const SCHEMA_V3: &str = r#"
+-- Index for sync_state queries that filter or sort by last_sync.
+CREATE INDEX IF NOT EXISTS idx_sync_state_last_sync ON sync_state(last_sync);
 "#;
 
 /// Runs the schema migration on the given connection.
+///
+/// Uses `PRAGMA user_version` to track which schema version has been applied so
+/// that future migrations can be added incrementally without re-running prior
+/// ones.
 pub fn run_migrations(conn: &Connection) -> Result<(), DriveError> {
-    conn.execute_batch(SCHEMA_V1)
-        .map_err(|e| DriveError::Io(format!("sqlite migration: {}", e)))?;
+    let current: i32 = conn
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .map_err(|e| DriveError::Io(format!("pragma user_version: {}", e)))?;
+    if current < 1 {
+        conn.execute_batch(SCHEMA_V1)
+            .map_err(|e| DriveError::Io(format!("sqlite migration v1: {}", e)))?;
+        conn.pragma_update(None, "user_version", 1)
+            .map_err(|e| DriveError::Io(format!("set user_version: {}", e)))?;
+    }
+    if current < 2 {
+        conn.execute_batch(SCHEMA_V2)
+            .map_err(|e| DriveError::Io(format!("sqlite migration v2: {}", e)))?;
+        conn.pragma_update(None, "user_version", 2)
+            .map_err(|e| DriveError::Io(format!("set user_version: {}", e)))?;
+    }
+    if current < 3 {
+        conn.execute_batch(SCHEMA_V3)
+            .map_err(|e| DriveError::Io(format!("sqlite migration v3: {}", e)))?;
+        conn.pragma_update(None, "user_version", 3)
+            .map_err(|e| DriveError::Io(format!("set user_version: {}", e)))?;
+    }
     Ok(())
 }

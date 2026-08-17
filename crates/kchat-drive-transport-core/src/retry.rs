@@ -41,6 +41,10 @@ pub fn retry_delay(config: &RetryConfig, attempt: u32) -> Duration {
 }
 
 /// Retries a fallible operation according to the config.
+///
+/// This is the **synchronous** retry helper. It uses `std::thread::sleep`
+/// to wait between attempts, which blocks the current thread. In async
+/// contexts, prefer [`with_retry_async`] to avoid blocking the executor.
 pub fn with_retry<F, T>(config: &RetryConfig, mut f: F) -> Result<T, DriveError>
 where
     F: FnMut() -> Result<T, DriveError>,
@@ -52,6 +56,8 @@ where
             Err(e) => {
                 last_err = Some(e);
                 if attempt + 1 < config.max_attempts {
+                    // NOTE: This is a blocking sleep. In async contexts, use
+                    // `with_retry_async` instead to avoid blocking the runtime.
                     #[cfg(not(target_arch = "wasm32"))]
                     std::thread::sleep(retry_delay(config, attempt));
                     #[cfg(target_arch = "wasm32")]
@@ -65,4 +71,55 @@ where
         }
     }
     Err(last_err.unwrap_or(DriveError::InvalidState("retry exhausted".into())))
+}
+
+/// Retries a fallible async operation according to the config.
+///
+/// Uses non-blocking async sleep between attempts:
+/// - On native targets: `tokio::time::sleep`
+/// - On WASM: `setTimeout` via `wasm_bindgen_futures`
+pub async fn with_retry_async<F, Fut, T>(config: &RetryConfig, mut f: F) -> Result<T, DriveError>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<T, DriveError>>,
+{
+    let mut last_err = None;
+    for attempt in 0..config.max_attempts {
+        match f().await {
+            Ok(v) => return Ok(v),
+            Err(e) => {
+                last_err = Some(e);
+                if attempt + 1 < config.max_attempts {
+                    async_sleep(retry_delay(config, attempt)).await;
+                }
+            }
+        }
+    }
+    Err(last_err.unwrap_or(DriveError::InvalidState("retry exhausted".into())))
+}
+
+/// Non-blocking async sleep.
+#[cfg(not(target_arch = "wasm32"))]
+async fn async_sleep(duration: Duration) {
+    tokio::time::sleep(duration).await;
+}
+
+/// Non-blocking async sleep for WASM (uses `setTimeout` via `wasm_bindgen_futures`).
+#[cfg(target_arch = "wasm32")]
+async fn async_sleep(duration: Duration) {
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen_futures::JsFuture;
+
+    let ms = duration.as_millis() as i32;
+    let promise = js_sys::Promise::new(|resolve, _| {
+        let global = js_sys::global();
+        // In the main thread, `global` is a `Window`; in a Web Worker, it is
+        // a `WorkerGlobalScope`. Both expose `setTimeout`.
+        if let Some(window) = global.dyn_ref::<web_sys::Window>() {
+            let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms);
+        } else if let Some(worker) = global.dyn_ref::<web_sys::WorkerGlobalScope>() {
+            let _ = worker.set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms);
+        }
+    });
+    let _ = JsFuture::from(promise).await;
 }

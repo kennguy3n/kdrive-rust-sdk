@@ -58,8 +58,8 @@ pub fn encrypt_content_chunk(
     chunk_index: u64,
     plaintext: &[u8],
 ) -> Result<Vec<u8>, DriveError> {
-    let key_bytes = derive_content_chunk_key(content_key, chunk_index);
-    let nonce_bytes = derive_content_chunk_nonce(content_key, chunk_index);
+    let key_bytes = derive_content_chunk_key(content_key, chunk_index)?;
+    let nonce_bytes = derive_content_chunk_nonce(content_key, chunk_index)?;
 
     let cipher =
         Aes256Gcm::new_from_slice(&key_bytes).map_err(|e| DriveError::Crypto(e.to_string()))?;
@@ -85,8 +85,8 @@ pub fn decrypt_content_chunk(
     chunk_index: u64,
     ciphertext: &[u8],
 ) -> Result<Vec<u8>, DriveError> {
-    let key_bytes = derive_content_chunk_key(content_key, chunk_index);
-    let nonce_bytes = derive_content_chunk_nonce(content_key, chunk_index);
+    let key_bytes = derive_content_chunk_key(content_key, chunk_index)?;
+    let nonce_bytes = derive_content_chunk_nonce(content_key, chunk_index)?;
 
     let cipher =
         Aes256Gcm::new_from_slice(&key_bytes).map_err(|e| DriveError::Crypto(e.to_string()))?;
@@ -149,6 +149,7 @@ pub fn encrypt_content_file(
 
     let mut chunks = Vec::with_capacity(n as usize);
     let mut ciphertexts = Vec::with_capacity(n as usize);
+    let mut aad_buf = Vec::with_capacity(48);
 
     for i in 0..n {
         let start = (i * cs) as usize;
@@ -156,7 +157,26 @@ pub fn encrypt_content_file(
         let chunk_plaintext = &plaintext[start..end];
         let plaintext_len = chunk_plaintext.len() as u64;
 
-        let ct = encrypt_content_chunk(&content_key, &content_id, i, chunk_plaintext)?;
+        // Build AAD into reusable buffer to avoid per-chunk allocation.
+        build_content_chunk_aad_into(&mut aad_buf, &content_id, i, plaintext_len);
+
+        let key_bytes = derive_content_chunk_key(&content_key, i)?;
+        let nonce_bytes = derive_content_chunk_nonce(&content_key, i)?;
+
+        let cipher =
+            Aes256Gcm::new_from_slice(&key_bytes).map_err(|e| DriveError::Crypto(e.to_string()))?;
+        let nonce = Nonce::from_slice(&nonce_bytes);
+
+        let ct = cipher
+            .encrypt(
+                nonce,
+                Payload {
+                    msg: chunk_plaintext,
+                    aad: &aad_buf,
+                },
+            )
+            .map_err(|e| DriveError::Crypto(e.to_string()))?;
+
         let ct_hash = ciphertext_sha256(&ct);
         let blob_key = content_blob_key(&content_id, &ct_hash);
 
@@ -188,10 +208,36 @@ pub fn decrypt_content_file(
         )));
     }
 
-    let mut plaintext = Vec::new();
+    // Pre-allocate plaintext buffer: total plaintext size is the sum of each
+    // chunk's plaintext_len from the chunk plan (avoids repeated reallocs).
+    let total_plaintext_size: u64 = chunk_plan
+        .chunks
+        .iter()
+        .map(|c| c.plaintext_len)
+        .sum();
+    let mut plaintext = Vec::with_capacity(total_plaintext_size as usize);
+    let mut aad_buf = Vec::with_capacity(48);
     for (i, ct) in ciphertexts.iter().enumerate() {
         let desc = &chunk_plan.chunks[i];
-        let pt = decrypt_content_chunk(content_key, content_id, desc.index, ct)?;
+        // Build AAD into reusable buffer to avoid per-chunk allocation.
+        build_content_chunk_aad_into(&mut aad_buf, content_id, desc.index, desc.plaintext_len);
+
+        let key_bytes = derive_content_chunk_key(content_key, desc.index)?;
+        let nonce_bytes = derive_content_chunk_nonce(content_key, desc.index)?;
+
+        let cipher =
+            Aes256Gcm::new_from_slice(&key_bytes).map_err(|e| DriveError::Crypto(e.to_string()))?;
+        let nonce = Nonce::from_slice(&nonce_bytes);
+
+        let pt = cipher
+            .decrypt(
+                nonce,
+                Payload {
+                    msg: ct,
+                    aad: &aad_buf,
+                },
+            )
+            .map_err(|e| DriveError::Crypto(e.to_string()))?;
         plaintext.extend_from_slice(&pt);
     }
 
@@ -206,8 +252,8 @@ pub fn wrap_content_key(
     content_id: &Hash256,
     content_key: &[u8; 32],
 ) -> Result<(Vec<u8>, [u8; 12]), DriveError> {
-    let key_bytes = derive_content_wrap_key(version_dek, version_id);
-    let nonce_bytes = derive_content_wrap_nonce(version_dek, version_id);
+    let key_bytes = derive_content_wrap_key(version_dek, version_id)?;
+    let nonce_bytes = derive_content_wrap_nonce(version_dek, version_id)?;
 
     let cipher =
         Aes256Gcm::new_from_slice(&key_bytes).map_err(|e| DriveError::Crypto(e.to_string()))?;
@@ -240,7 +286,7 @@ pub fn unwrap_content_key(
     wrapped_content_key: &[u8],
     wrap_nonce: &[u8; 12],
 ) -> Result<[u8; 32], DriveError> {
-    let key_bytes = derive_content_wrap_key(version_dek, version_id);
+    let key_bytes = derive_content_wrap_key(version_dek, version_id)?;
 
     let cipher =
         Aes256Gcm::new_from_slice(&key_bytes).map_err(|e| DriveError::Crypto(e.to_string()))?;
@@ -356,8 +402,20 @@ pub fn encrypt_content_streaming<'a, R: Read>(
         // Build AAD into the reusable buffer.
         build_content_chunk_aad_into(&mut aad_buf, content_id, chunk_index, buf.len() as u64);
 
-        let key_bytes = derive_content_chunk_key(content_key, chunk_index);
-        let nonce_bytes = derive_content_chunk_nonce(content_key, chunk_index);
+        let key_bytes = match derive_content_chunk_key(content_key, chunk_index) {
+            Ok(k) => k,
+            Err(e) => {
+                drop(buf);
+                return Some(Err(e));
+            }
+        };
+        let nonce_bytes = match derive_content_chunk_nonce(content_key, chunk_index) {
+            Ok(n) => n,
+            Err(e) => {
+                drop(buf);
+                return Some(Err(e));
+            }
+        };
 
         let cipher = match Aes256Gcm::new_from_slice(&key_bytes) {
             Ok(c) => c,

@@ -109,6 +109,50 @@ impl OperationJournal {
         Ok(())
     }
 
+    /// Marks an entry as completed and trims old completed/failed entries.
+    pub fn record_complete(&mut self, seq: u64) -> Result<(), DriveError> {
+        self.update_status(seq, OperationStatus::Completed, None)?;
+        self.trim_completed(1000);
+        Ok(())
+    }
+
+    /// Marks an entry as failed and trims old completed/failed entries.
+    pub fn record_fail(&mut self, seq: u64, error: String) -> Result<(), DriveError> {
+        self.update_status(seq, OperationStatus::Failed, Some(error))?;
+        self.trim_completed(1000);
+        Ok(())
+    }
+
+    /// Removes completed/failed entries beyond the last `max_keep`, keeping
+    /// all pending/in-progress/conflicted entries regardless of age.
+    pub fn trim_completed(&mut self, max_keep: usize) {
+        let completed_count = self
+            .entries
+            .iter()
+            .filter(|e| {
+                e.status == OperationStatus::Completed || e.status == OperationStatus::Failed
+            })
+            .count();
+
+        if completed_count <= max_keep {
+            return;
+        }
+
+        let to_remove = completed_count - max_keep;
+        let mut removed = 0usize;
+        self.entries.retain(|e| {
+            if removed >= to_remove {
+                return true;
+            }
+            if e.status == OperationStatus::Completed || e.status == OperationStatus::Failed {
+                removed += 1;
+                false
+            } else {
+                true
+            }
+        });
+    }
+
     pub fn entries(&self) -> &[JournalEntry] {
         &self.entries
     }

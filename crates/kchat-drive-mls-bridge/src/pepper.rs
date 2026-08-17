@@ -37,7 +37,7 @@ pub fn seal_pepper_via_mls(
         PEPPER_PURPOSE,
         &context.context_hash(),
         envelope_id,
-    );
+    )?;
 
     let cipher =
         Aes256Gcm::new_from_slice(&key_bytes).map_err(|e| DriveError::Crypto(e.to_string()))?;
@@ -51,7 +51,7 @@ pub fn seal_pepper_via_mls(
             nonce,
             Payload {
                 msg: pepper,
-                aad: &aad,
+                aad: aad,
             },
         )
         .map_err(|e| DriveError::Crypto(e.to_string()))?;
@@ -81,7 +81,7 @@ pub fn open_pepper_via_mls(
         PEPPER_PURPOSE,
         &context.context_hash(),
         envelope_id,
-    );
+    )?;
 
     let cipher =
         Aes256Gcm::new_from_slice(&key_bytes).map_err(|e| DriveError::Crypto(e.to_string()))?;
@@ -94,7 +94,7 @@ pub fn open_pepper_via_mls(
             nonce,
             Payload {
                 msg: ciphertext,
-                aad: &aad,
+                aad: aad,
             },
         )
         .map_err(|e| DriveError::Crypto(e.to_string()))?;
@@ -141,12 +141,12 @@ mod tests {
     #[test]
     fn pepper_seal_open_roundtrip() {
         let domain_id = DomainId::new([1; 16]);
-        let context = AdvancedTransportContext {
+        let context = AdvancedTransportContext::new(
             domain_id,
-            generation: 1,
-            mls_epoch: 5,
-            mls_tree_hash: Hash256::new([0xAA; 32]),
-        };
+            1,
+            5,
+            Hash256::new([0xAA; 32]),
+        );
         let envelope_id = EnvelopeId::new([2; 16]);
         let pepper = [0xBB; 32];
         let mls_output = [0xCC; 64];
@@ -163,12 +163,12 @@ mod tests {
     #[test]
     fn pepper_seal_wrong_mls_output_fails() {
         let domain_id = DomainId::new([1; 16]);
-        let context = AdvancedTransportContext {
+        let context = AdvancedTransportContext::new(
             domain_id,
-            generation: 1,
-            mls_epoch: 5,
-            mls_tree_hash: Hash256::new([0xAA; 32]),
-        };
+            1,
+            5,
+            Hash256::new([0xAA; 32]),
+        );
         let envelope_id = EnvelopeId::new([2; 16]);
         let pepper = [0xBB; 32];
         let mls_output = [0xCC; 64];
@@ -185,18 +185,18 @@ mod tests {
     #[test]
     fn pepper_seal_wrong_epoch_fails() {
         let domain_id = DomainId::new([1; 16]);
-        let context1 = AdvancedTransportContext {
-            domain_id: domain_id.clone(),
-            generation: 1,
-            mls_epoch: 5,
-            mls_tree_hash: Hash256::new([0xAA; 32]),
-        };
-        let context2 = AdvancedTransportContext {
+        let context1 = AdvancedTransportContext::new(
+            domain_id.clone(),
+            1,
+            5,
+            Hash256::new([0xAA; 32]),
+        );
+        let context2 = AdvancedTransportContext::new(
             domain_id,
-            generation: 1,
-            mls_epoch: 6, // different epoch
-            mls_tree_hash: Hash256::new([0xAA; 32]),
-        };
+            1,
+            6, // different epoch
+            Hash256::new([0xAA; 32]),
+        );
         let envelope_id = EnvelopeId::new([2; 16]);
         let pepper = [0xBB; 32];
         let mls_output = [0xCC; 64];
@@ -211,12 +211,12 @@ mod tests {
 
     #[test]
     fn pepper_envelope_hash_is_deterministic() {
-        let context = AdvancedTransportContext {
-            domain_id: DomainId::new([1; 16]),
-            generation: 1,
-            mls_epoch: 5,
-            mls_tree_hash: Hash256::new([0xAA; 32]),
-        };
+        let context = AdvancedTransportContext::new(
+            DomainId::new([1; 16]),
+            1,
+            5,
+            Hash256::new([0xAA; 32]),
+        );
         let envelope_id = EnvelopeId::new([2; 16]);
         let ct = vec![0xFF; 48];
 

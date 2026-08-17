@@ -3,7 +3,7 @@ use rand::RngCore;
 use sha2::Sha256;
 use zeroize::Zeroize;
 
-use kchat_drive_types::{Hash256, NodeId, PROTOCOL_VERSION, VersionId};
+use kchat_drive_types::{DriveError, Hash256, NodeId, PROTOCOL_VERSION, VersionId};
 
 // Re-export centralized labels for backward compatibility.
 pub use crate::labels::{
@@ -31,13 +31,15 @@ pub fn derive_chunk_key(
     node_id: &NodeId,
     version_id: &VersionId,
     chunk_index: u64,
-) -> [u8; 32] {
-    let mut info = Vec::new();
+) -> Result<[u8; 32], DriveError> {
+    let mut info = Vec::with_capacity(80);
     derive_chunk_key_into(node_id, version_id, chunk_index, &mut info);
-    let hkdf = Hkdf::<Sha256>::from_prk(prk.as_slice()).expect("valid PRK");
+    let hkdf = Hkdf::<Sha256>::from_prk(prk.as_slice())
+        .map_err(|e| DriveError::Crypto(format!("HKDF init failed: {}", e)))?;
     let mut okm = [0u8; 32];
-    hkdf.expand(&info, &mut okm).expect("32 bytes is valid");
-    okm
+    hkdf.expand(&info, &mut okm)
+        .map_err(|e| DriveError::Crypto(format!("HKDF expand failed: {}", e)))?;
+    Ok(okm)
 }
 
 /// Builds the chunk-key HKDF info into a reusable buffer (avoids per-call allocation).
@@ -61,13 +63,15 @@ pub fn derive_chunk_nonce(
     node_id: &NodeId,
     version_id: &VersionId,
     chunk_index: u64,
-) -> [u8; 12] {
-    let mut info = Vec::new();
+) -> Result<[u8; 12], DriveError> {
+    let mut info = Vec::with_capacity(80);
     derive_chunk_nonce_into(node_id, version_id, chunk_index, &mut info);
-    let hkdf = Hkdf::<Sha256>::from_prk(prk.as_slice()).expect("valid PRK");
+    let hkdf = Hkdf::<Sha256>::from_prk(prk.as_slice())
+        .map_err(|e| DriveError::Crypto(format!("HKDF init failed: {}", e)))?;
     let mut okm = [0u8; 12];
-    hkdf.expand(&info, &mut okm).expect("12 bytes is valid");
-    okm
+    hkdf.expand(&info, &mut okm)
+        .map_err(|e| DriveError::Crypto(format!("HKDF expand failed: {}", e)))?;
+    Ok(okm)
 }
 
 /// Builds the chunk-nonce HKDF info into a reusable buffer (avoids per-call allocation).
@@ -86,30 +90,42 @@ pub fn derive_chunk_nonce_into(
 
 /// Derives the manifest key:
 /// HKDF-Expand(PRK, "kchat-drive/manifest-key/v1" || node_id || version_id, 32)
-pub fn derive_manifest_key(prk: &[u8; 32], node_id: &NodeId, version_id: &VersionId) -> [u8; 32] {
-    let mut info = Vec::new();
+pub fn derive_manifest_key(
+    prk: &[u8; 32],
+    node_id: &NodeId,
+    version_id: &VersionId,
+) -> Result<[u8; 32], DriveError> {
+    let mut info = Vec::with_capacity(80);
     info.extend_from_slice(MANIFEST_KEY_INFO.as_bytes());
     info.extend_from_slice(node_id.as_bytes());
     info.extend_from_slice(version_id.as_bytes());
 
-    let hkdf = Hkdf::<Sha256>::from_prk(prk.as_slice()).expect("valid PRK");
+    let hkdf = Hkdf::<Sha256>::from_prk(prk.as_slice())
+        .map_err(|e| DriveError::Crypto(format!("HKDF init failed: {}", e)))?;
     let mut okm = [0u8; 32];
-    hkdf.expand(&info, &mut okm).expect("32 bytes is valid");
-    okm
+    hkdf.expand(&info, &mut okm)
+        .map_err(|e| DriveError::Crypto(format!("HKDF expand failed: {}", e)))?;
+    Ok(okm)
 }
 
 /// Derives the manifest nonce:
 /// HKDF-Expand(PRK, "kchat-drive/manifest-nonce/v1" || node_id || version_id, 12)
-pub fn derive_manifest_nonce(prk: &[u8; 32], node_id: &NodeId, version_id: &VersionId) -> [u8; 12] {
-    let mut info = Vec::new();
+pub fn derive_manifest_nonce(
+    prk: &[u8; 32],
+    node_id: &NodeId,
+    version_id: &VersionId,
+) -> Result<[u8; 12], DriveError> {
+    let mut info = Vec::with_capacity(80);
     info.extend_from_slice(MANIFEST_NONCE_INFO.as_bytes());
     info.extend_from_slice(node_id.as_bytes());
     info.extend_from_slice(version_id.as_bytes());
 
-    let hkdf = Hkdf::<Sha256>::from_prk(prk.as_slice()).expect("valid PRK");
+    let hkdf = Hkdf::<Sha256>::from_prk(prk.as_slice())
+        .map_err(|e| DriveError::Crypto(format!("HKDF init failed: {}", e)))?;
     let mut okm = [0u8; 12];
-    hkdf.expand(&info, &mut okm).expect("12 bytes is valid");
-    okm
+    hkdf.expand(&info, &mut okm)
+        .map_err(|e| DriveError::Crypto(format!("HKDF expand failed: {}", e)))?;
+    Ok(okm)
 }
 
 /// Derives a transport key from MLS exporter output:
@@ -120,20 +136,22 @@ pub fn derive_transport_key(
     purpose: &str,
     context_hash: &[u8; 32],
     envelope_id: &[u8; 16],
-) -> [u8; 32] {
+) -> Result<[u8; 32], DriveError> {
     let (prk, _) = Hkdf::<Sha256>::extract(Some(transport_salt), mls_exporter_output);
     let mut prk_bytes = [0u8; 32];
     prk_bytes.copy_from_slice(prk.as_slice());
-    let mut info = Vec::new();
+    let mut info = Vec::with_capacity(80);
     info.extend_from_slice(format!("kchat-drive/{}/transport-key/v1", purpose).as_bytes());
     info.extend_from_slice(context_hash);
     info.extend_from_slice(envelope_id);
 
-    let hkdf = Hkdf::<Sha256>::from_prk(&prk_bytes).expect("valid PRK");
+    let hkdf = Hkdf::<Sha256>::from_prk(&prk_bytes)
+        .map_err(|e| DriveError::Crypto(format!("HKDF init failed: {}", e)))?;
     let mut okm = [0u8; 32];
-    hkdf.expand(&info, &mut okm).expect("32 bytes is valid");
+    hkdf.expand(&info, &mut okm)
+        .map_err(|e| DriveError::Crypto(format!("HKDF expand failed: {}", e)))?;
     prk_bytes.zeroize();
-    okm
+    Ok(okm)
 }
 
 /// Derives a transport nonce from MLS exporter output.
@@ -143,20 +161,22 @@ pub fn derive_transport_nonce(
     purpose: &str,
     context_hash: &[u8; 32],
     envelope_id: &[u8; 16],
-) -> [u8; 12] {
+) -> Result<[u8; 12], DriveError> {
     let (prk, _) = Hkdf::<Sha256>::extract(Some(transport_salt), mls_exporter_output);
     let mut prk_bytes = [0u8; 32];
     prk_bytes.copy_from_slice(prk.as_slice());
-    let mut info = Vec::new();
+    let mut info = Vec::with_capacity(80);
     info.extend_from_slice(format!("kchat-drive/{}/transport-nonce/v1", purpose).as_bytes());
     info.extend_from_slice(context_hash);
     info.extend_from_slice(envelope_id);
 
-    let hkdf = Hkdf::<Sha256>::from_prk(&prk_bytes).expect("valid PRK");
+    let hkdf = Hkdf::<Sha256>::from_prk(&prk_bytes)
+        .map_err(|e| DriveError::Crypto(format!("HKDF init failed: {}", e)))?;
     let mut okm = [0u8; 12];
-    hkdf.expand(&info, &mut okm).expect("12 bytes is valid");
+    hkdf.expand(&info, &mut okm)
+        .map_err(|e| DriveError::Crypto(format!("HKDF expand failed: {}", e)))?;
     prk_bytes.zeroize();
-    okm
+    Ok(okm)
 }
 
 /// Generates a random 32-byte key (VersionDEK, DomainKey, ShareGrantKey).
@@ -263,63 +283,79 @@ pub fn compute_content_id(plaintext_sha256: &Hash256, tenant_pepper: &[u8; 32]) 
 
 /// Derives a content chunk key:
 /// HKDF-Expand(ContentKey, "kchat-drive/chunk-content-key/v1" || u64be(i), 32)
-#[must_use]
-pub fn derive_content_chunk_key(content_key: &[u8; 32], chunk_index: u64) -> [u8; 32] {
-    let mut info = Vec::new();
+pub fn derive_content_chunk_key(
+    content_key: &[u8; 32],
+    chunk_index: u64,
+) -> Result<[u8; 32], DriveError> {
+    let mut info = Vec::with_capacity(80);
     info.extend_from_slice(CONTENT_CHUNK_KEY_INFO.as_bytes());
     info.extend_from_slice(&chunk_index.to_be_bytes());
 
-    let hkdf = Hkdf::<Sha256>::from_prk(content_key.as_slice()).expect("valid PRK");
+    let hkdf = Hkdf::<Sha256>::from_prk(content_key.as_slice())
+        .map_err(|e| DriveError::Crypto(format!("HKDF init failed: {}", e)))?;
     let mut okm = [0u8; 32];
-    hkdf.expand(&info, &mut okm).expect("32 bytes is valid");
-    okm
+    hkdf.expand(&info, &mut okm)
+        .map_err(|e| DriveError::Crypto(format!("HKDF expand failed: {}", e)))?;
+    Ok(okm)
 }
 
 /// Derives a content chunk nonce:
 /// HKDF-Expand(ContentKey, "kchat-drive/chunk-content-nonce/v1" || u64be(i), 12)
-#[must_use]
-pub fn derive_content_chunk_nonce(content_key: &[u8; 32], chunk_index: u64) -> [u8; 12] {
-    let mut info = Vec::new();
+pub fn derive_content_chunk_nonce(
+    content_key: &[u8; 32],
+    chunk_index: u64,
+) -> Result<[u8; 12], DriveError> {
+    let mut info = Vec::with_capacity(80);
     info.extend_from_slice(CONTENT_CHUNK_NONCE_INFO.as_bytes());
     info.extend_from_slice(&chunk_index.to_be_bytes());
 
-    let hkdf = Hkdf::<Sha256>::from_prk(content_key.as_slice()).expect("valid PRK");
+    let hkdf = Hkdf::<Sha256>::from_prk(content_key.as_slice())
+        .map_err(|e| DriveError::Crypto(format!("HKDF init failed: {}", e)))?;
     let mut okm = [0u8; 12];
-    hkdf.expand(&info, &mut okm).expect("12 bytes is valid");
-    okm
+    hkdf.expand(&info, &mut okm)
+        .map_err(|e| DriveError::Crypto(format!("HKDF expand failed: {}", e)))?;
+    Ok(okm)
 }
 
 /// Derives the content-wrap key from VersionDEK + version_id:
 /// WrapKey = HKDF-Expand(PRK, "kchat-drive/content-wrap-key/v1" || version_id, 32)
 /// where PRK = HKDF-Extract(version_salt, VersionDEK) (same as KDRV1).
-#[must_use]
-pub fn derive_content_wrap_key(version_dek: &[u8; 32], version_id: &VersionId) -> [u8; 32] {
+pub fn derive_content_wrap_key(
+    version_dek: &[u8; 32],
+    version_id: &VersionId,
+) -> Result<[u8; 32], DriveError> {
     let mut prk = extract_prk(version_dek);
-    let mut info = Vec::new();
+    let mut info = Vec::with_capacity(80);
     info.extend_from_slice(CONTENT_WRAP_KEY_INFO.as_bytes());
     info.extend_from_slice(version_id.as_bytes());
 
-    let hkdf = Hkdf::<Sha256>::from_prk(prk.as_slice()).expect("valid PRK");
+    let hkdf = Hkdf::<Sha256>::from_prk(prk.as_slice())
+        .map_err(|e| DriveError::Crypto(format!("HKDF init failed: {}", e)))?;
     let mut okm = [0u8; 32];
-    hkdf.expand(&info, &mut okm).expect("32 bytes is valid");
+    hkdf.expand(&info, &mut okm)
+        .map_err(|e| DriveError::Crypto(format!("HKDF expand failed: {}", e)))?;
     prk.zeroize();
-    okm
+    Ok(okm)
 }
 
 /// Derives the content-wrap nonce from VersionDEK + version_id:
 /// WrapNonce = HKDF-Expand(PRK, "kchat-drive/content-wrap-nonce/v1" || version_id, 12)
-#[must_use]
-pub fn derive_content_wrap_nonce(version_dek: &[u8; 32], version_id: &VersionId) -> [u8; 12] {
+pub fn derive_content_wrap_nonce(
+    version_dek: &[u8; 32],
+    version_id: &VersionId,
+) -> Result<[u8; 12], DriveError> {
     let mut prk = extract_prk(version_dek);
-    let mut info = Vec::new();
+    let mut info = Vec::with_capacity(80);
     info.extend_from_slice(CONTENT_WRAP_NONCE_INFO.as_bytes());
     info.extend_from_slice(version_id.as_bytes());
 
-    let hkdf = Hkdf::<Sha256>::from_prk(prk.as_slice()).expect("valid PRK");
+    let hkdf = Hkdf::<Sha256>::from_prk(prk.as_slice())
+        .map_err(|e| DriveError::Crypto(format!("HKDF init failed: {}", e)))?;
     let mut okm = [0u8; 12];
-    hkdf.expand(&info, &mut okm).expect("12 bytes is valid");
+    hkdf.expand(&info, &mut okm)
+        .map_err(|e| DriveError::Crypto(format!("HKDF expand failed: {}", e)))?;
     prk.zeroize();
-    okm
+    Ok(okm)
 }
 
 /// Generates a random 32-byte tenant pepper.

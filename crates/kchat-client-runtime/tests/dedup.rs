@@ -447,12 +447,12 @@ fn tenant_pepper_mls_round_trip() {
 
     // MLS context (both devices are in the same MLS group)
     let domain_id = DomainId::new([5; 16]);
-    let context = AdvancedTransportContext {
-        domain_id: domain_id.clone(),
-        generation: 1,
-        mls_epoch: 42,
-        mls_tree_hash: Hash256::new([0xAB; 32]),
-    };
+    let context = AdvancedTransportContext::new(
+        domain_id.clone(),
+        1,
+        42,
+        Hash256::new([0xAB; 32]),
+    );
 
     // Simulate MLS exporter output (both devices derive the same key)
     let mls_exporter_output = generate_key();

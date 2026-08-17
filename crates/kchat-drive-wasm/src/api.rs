@@ -199,12 +199,12 @@ impl WasmDriveRuntime {
         let envelope_id = kchat_drive_types::EnvelopeId::from_hex(envelope_id_hex)
             .map_err(crate::error::to_js_error)?;
 
-        let context = kchat_drive_mls_bridge::context::AdvancedTransportContext {
+        let context = kchat_drive_mls_bridge::context::AdvancedTransportContext::new(
             domain_id,
             generation,
             mls_epoch,
-            mls_tree_hash: tree_hash,
-        };
+            tree_hash,
+        );
 
         let (ct, nonce) = kchat_drive_mls_bridge::pepper::seal_pepper_via_mls(
             &exporter_out,
@@ -274,12 +274,12 @@ impl WasmDriveRuntime {
         let envelope_id = kchat_drive_types::EnvelopeId::from_hex(envelope_id_hex)
             .map_err(crate::error::to_js_error)?;
 
-        let context = kchat_drive_mls_bridge::context::AdvancedTransportContext {
+        let context = kchat_drive_mls_bridge::context::AdvancedTransportContext::new(
             domain_id,
             generation,
             mls_epoch,
-            mls_tree_hash: tree_hash,
-        };
+            tree_hash,
+        );
 
         let pepper = kchat_drive_mls_bridge::pepper::open_pepper_via_mls(
             &exporter_out,
@@ -382,7 +382,7 @@ impl WasmDriveRuntime {
     #[wasm_bindgen(js_name = exportMasterKey)]
     pub fn export_master_key(&self) -> Result<String, JsValue> {
         let vault = self.runtime.vault();
-        Ok(hex::encode(vault.master_key()))
+        Ok(hex::encode(&*vault.master_key()))
     }
 
     /// Creates a domain key and stores it in the vault.

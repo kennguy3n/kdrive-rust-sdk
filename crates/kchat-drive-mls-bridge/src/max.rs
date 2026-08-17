@@ -31,7 +31,7 @@ pub fn seal_max_share_grant_key<Provider: OpenMlsProvider>(
     // Call the MLS exporter.
     let exporter_output = zeroize::Zeroizing::new(
         group
-            .export_secret(provider.crypto(), label, &context_bytes, 32)
+            .export_secret(provider.crypto(), label, context_bytes, 32)
             .map_err(|e| DriveError::MlsBridge(format!("export_secret: {}", e)))?,
     );
 
@@ -46,7 +46,7 @@ pub fn seal_max_share_grant_key<Provider: OpenMlsProvider>(
         MAX_PURPOSE,
         &context_hash,
         &envelope_id,
-    );
+    )?;
 
     // Seal the ShareGrantKey under the transport key.
     let envelope = create_mls_transport_envelope(
@@ -86,7 +86,7 @@ pub fn open_max_share_grant_key_and_store<Provider: OpenMlsProvider>(
     // Call the MLS exporter.
     let exporter_output = zeroize::Zeroizing::new(
         group
-            .export_secret(provider.crypto(), label, &context_bytes, 32)
+            .export_secret(provider.crypto(), label, context_bytes, 32)
             .map_err(|e| DriveError::MlsBridge(format!("export_secret: {}", e)))?,
     );
 
@@ -104,7 +104,7 @@ pub fn open_max_share_grant_key_and_store<Provider: OpenMlsProvider>(
         MAX_PURPOSE,
         &context_hash,
         &envelope.envelope_id,
-    );
+    )?;
 
     // Open the envelope.
     let key_bytes = open_mls_transport_envelope(envelope, &transport_key)?;

@@ -22,8 +22,8 @@ pub fn encrypt_manifest(
     manifest: &Manifest,
 ) -> Result<(Vec<u8>, Nonce12), DriveError> {
     let prk = extract_prk(version_dek);
-    let key_bytes = derive_manifest_key(&prk, node_id, version_id);
-    let nonce_bytes = derive_manifest_nonce(&prk, node_id, version_id);
+    let key_bytes = derive_manifest_key(&prk, node_id, version_id)?;
+    let nonce_bytes = derive_manifest_nonce(&prk, node_id, version_id)?;
 
     let mut plaintext = zeroize::Zeroizing::new(Vec::new());
     minicbor::encode(manifest, &mut *plaintext)?;
@@ -54,7 +54,7 @@ pub fn decrypt_manifest(
     nonce: &Nonce12,
 ) -> Result<Manifest, DriveError> {
     let prk = extract_prk(version_dek);
-    let key_bytes = derive_manifest_key(&prk, node_id, version_id);
+    let key_bytes = derive_manifest_key(&prk, node_id, version_id)?;
 
     let cipher =
         Aes256Gcm::new_from_slice(&key_bytes).map_err(|e| DriveError::Crypto(e.to_string()))?;

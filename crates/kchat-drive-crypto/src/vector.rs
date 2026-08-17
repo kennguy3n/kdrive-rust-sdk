@@ -53,10 +53,14 @@ pub fn generate_kdf_vectors() -> Vec<KdfVector> {
     let mut vectors = Vec::new();
     for chunk_index in 0..3u64 {
         let prk = crate::kdf::extract_prk(&version_dek);
-        let chunk_key = crate::kdf::derive_chunk_key(&prk, &node_id, &version_id, chunk_index);
-        let chunk_nonce = crate::kdf::derive_chunk_nonce(&prk, &node_id, &version_id, chunk_index);
-        let manifest_key = crate::kdf::derive_manifest_key(&prk, &node_id, &version_id);
-        let manifest_nonce = crate::kdf::derive_manifest_nonce(&prk, &node_id, &version_id);
+        let chunk_key =
+            crate::kdf::derive_chunk_key(&prk, &node_id, &version_id, chunk_index).expect("valid PRK");
+        let chunk_nonce =
+            crate::kdf::derive_chunk_nonce(&prk, &node_id, &version_id, chunk_index).expect("valid PRK");
+        let manifest_key =
+            crate::kdf::derive_manifest_key(&prk, &node_id, &version_id).expect("valid PRK");
+        let manifest_nonce =
+            crate::kdf::derive_manifest_nonce(&prk, &node_id, &version_id).expect("valid PRK");
 
         vectors.push(KdfVector {
             version_dek_hex: hex::encode(version_dek),
