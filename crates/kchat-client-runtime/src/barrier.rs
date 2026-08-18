@@ -85,7 +85,7 @@ impl EpochBarrier {
         if self.pending.len() >= MAX_PENDING_BARRIERS {
             self.pending.remove(0);
         }
-        self.pending.push(PendingBarrier {
+        self.pending.push_back(PendingBarrier {
             domain_id: Some(domain_id),
             grant_id: None,
             target_epoch,
@@ -100,7 +100,7 @@ impl EpochBarrier {
         if self.pending.len() >= MAX_PENDING_BARRIERS {
             self.pending.remove(0);
         }
-        self.pending.push(PendingBarrier {
+        self.pending.push_back(PendingBarrier {
             domain_id: None,
             grant_id: Some(grant_id),
             target_epoch,
