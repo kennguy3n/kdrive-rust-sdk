@@ -224,6 +224,7 @@ pub fn encrypt_file(
             ciphertext_len: ct.len() as u64,
             ciphertext_sha256: ct_hash,
             blob_key: format!("blob_{}_{}", version_id.to_hex(), i),
+            plaintext_sha256: None, // KDRV1 legacy chunk encryption
         });
         ciphertexts.push(ct);
     }

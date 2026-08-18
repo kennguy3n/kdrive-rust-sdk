@@ -396,6 +396,7 @@ pub fn decrypt_file_json(
                     ciphertext_len: c["ciphertextLen"].as_u64().unwrap_or(0),
                     ciphertext_sha256: kchat_drive_types::Hash256::from_slice(&ct_hash),
                     blob_key: c["blobKey"].as_str().unwrap_or("").to_string(),
+                    plaintext_sha256: None, // Legacy for NAPI download
                 })
             })
             .collect::<Result<_, _>>()?,

@@ -176,6 +176,7 @@ pub fn decrypt_file_wasm(
                     ciphertext_len: c["ciphertextLen"].as_u64().unwrap_or(0),
                     ciphertext_sha256: kchat_drive_types::Hash256::from_slice(&ct_hash),
                     blob_key: c["blobKey"].as_str().unwrap_or("").to_string(),
+                    plaintext_sha256: None, // Legacy for WASM
                 })
             })
             .collect::<Result<_, _>>()?,
@@ -694,16 +695,20 @@ pub fn decrypt_content_file(
                 ciphertext_len: ct.len() as u64,
                 ciphertext_sha256: ct_hash,
                 blob_key,
+                plaintext_sha256: None, // Legacy mode for WASM backward compat
             }
         })
         .collect();
     let chunk_plan = kchat_drive_types::ChunkPlan { chunks };
 
+    // Use a dummy pepper for legacy mode (plaintext_sha256 is None, so pepper is unused)
+    let dummy_pepper = [0u8; 32];
     let plaintext = kchat_drive_crypto::decrypt_content_file(
         &content_key,
         &content_id,
         &chunk_plan,
         &ciphertexts,
+        &dummy_pepper,
     )
     .map_err(crate::error::to_js_error)?;
 

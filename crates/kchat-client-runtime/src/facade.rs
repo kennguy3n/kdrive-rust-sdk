@@ -8,7 +8,7 @@ use kchat_drive_crypto::{
 use kchat_drive_transport_core::DedupTransport;
 use kchat_drive_types::{
     DomainId, DriveError, DriveId, Ed25519PublicKey, Hash256, NodeId, Nonce12, PROTOCOL_KDRV1,
-    PrivacyMode, PublicVersionHeader, SUITE_KDRV1, VersionId,
+    PrivacyMode, PublicVersionHeader, SUITE_KDRV1, TenantId, VersionId,
 };
 use kchat_drive_types::{Key256, ShareGrantId, UserId};
 
@@ -279,6 +279,7 @@ impl DriveFacade {
                     ciphertext_len: 0, // Not needed for deduped chunks
                     ciphertext_sha256: ct_hash,
                     blob_key: reused_blob_keys[idx].clone(),
+                    plaintext_sha256: None, // Reused chunk — key derived from blob lookup
                 });
             }
             chunk_plan = kchat_drive_types::ChunkPlan { chunks };
@@ -531,6 +532,7 @@ impl DriveFacade {
         manifest_ciphertext: &[u8],
         manifest_nonce: &Nonce12,
         ciphertexts: &[Vec<u8>],
+        tenant_id: &TenantId,
     ) -> Result<DedupDownloadResult, DriveError> {
         // Decrypt manifest
         let manifest = decrypt_manifest(
@@ -571,9 +573,12 @@ impl DriveFacade {
             content_wrap_nonce.as_bytes(),
         )?;
 
+        // Load tenant pepper for convergent chunk key derivation
+        let pepper = self.load_tenant_pepper(tenant_id)?;
+
         // Decrypt content chunks
         let plaintext =
-            decrypt_content_file(&content_key, content_id, &manifest.chunk_plan, ciphertexts)?;
+            decrypt_content_file(&content_key, content_id, &manifest.chunk_plan, ciphertexts, &pepper)?;
 
         Ok(DedupDownloadResult {
             plaintext,

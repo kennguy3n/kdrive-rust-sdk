@@ -17,7 +17,7 @@ fn manifest_encrypt_decrypt_roundtrip() {
                 plaintext_len: 100,
                 ciphertext_len: 116,
                 ciphertext_sha256: Hash256::new([0xAA; 32]),
-                blob_key: "blob_001".to_string(),
+                blob_key: "blob_001".to_string(), plaintext_sha256: None,
             }],
         },
         name_ciphertext: vec![0xBB; 32],

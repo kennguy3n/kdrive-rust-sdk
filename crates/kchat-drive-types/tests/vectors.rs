@@ -94,7 +94,7 @@ fn cbor_manifest_roundtrip() {
                 plaintext_len: 1024,
                 ciphertext_len: 1040,
                 ciphertext_sha256: Hash256::new([0xAA; 32]),
-                blob_key: "blob_001".to_string(),
+                blob_key: "blob_001".to_string(), plaintext_sha256: None,
             }],
         },
         name_ciphertext: vec![0xBB; 32],
@@ -151,7 +151,7 @@ fn chunk_plan_merkle_root_single_chunk() {
             plaintext_len: 1024,
             ciphertext_len: 1040,
             ciphertext_sha256: Hash256::new([0xAA; 32]),
-            blob_key: "blob_001".to_string(),
+            blob_key: "blob_001".to_string(), plaintext_sha256: None,
         }],
     };
     let root = plan.merkle_root();

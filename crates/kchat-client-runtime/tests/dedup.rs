@@ -4,7 +4,7 @@ use kchat_drive_transport_core::{
     ChunkCheckEntry, ChunkCheckResult, ContentCheckResult, DedupCommitResult, DedupTransport,
 };
 use kchat_drive_types::{
-    DomainId, DriveError, DriveId, Ed25519PublicKey, Hash256, NodeId, PrivacyMode,
+    DomainId, DriveError, DriveId, Ed25519PublicKey, Hash256, NodeId, PrivacyMode, TenantId,
 };
 use sha2::Digest;
 use std::collections::HashMap;
@@ -321,6 +321,8 @@ fn dedup_upload_download_roundtrip() {
     let (facade, signing_key, creator_key) = setup_facade();
     let transport = MockTransport::new();
     let pepper = generate_tenant_pepper();
+    let tenant_id = TenantId::new([1; 16]);
+    facade.store_tenant_pepper(&tenant_id, &pepper).unwrap();
     let wrapping_key = kchat_drive_types::Key256::new(generate_key());
 
     let plaintext = b"Dedup roundtrip test - encrypt, dedup, decrypt".to_vec();
@@ -357,6 +359,7 @@ fn dedup_upload_download_roundtrip() {
             &result.manifest_ciphertext,
             &result.manifest_nonce,
             &result.new_ciphertexts,
+            &TenantId::new([1; 16]),
         )
         .unwrap();
 
@@ -1136,6 +1139,8 @@ fn upload_and_commit_download_roundtrip() {
     let (facade, signing_key, creator_key) = setup_facade();
     let transport = MockTransport::new();
     let pepper = generate_tenant_pepper();
+    let tenant_id = TenantId::new([1; 16]);
+    facade.store_tenant_pepper(&tenant_id, &pepper).unwrap();
     let wrapping_key = kchat_drive_types::Key256::new(generate_key());
 
     let plaintext = b"upload_and_commit roundtrip - encrypt, commit, download, decrypt".to_vec();
@@ -1170,6 +1175,7 @@ fn upload_and_commit_download_roundtrip() {
             &result.manifest_ciphertext,
             &result.manifest_nonce,
             &result.new_ciphertexts,
+            &TenantId::new([1; 16]),
         )
         .unwrap();
 

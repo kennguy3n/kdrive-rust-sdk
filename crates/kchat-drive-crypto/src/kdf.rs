@@ -317,6 +317,61 @@ pub fn derive_content_chunk_nonce(
     Ok(okm)
 }
 
+/// Derives a convergent per-chunk content key from the chunk's plaintext hash
+/// and the tenant pepper. This enables chunk-level dedup: identical plaintext
+/// chunks produce identical ciphertexts regardless of which file they belong to.
+///
+/// ChunkKey = HKDF-Extract(CONTENT_KEY_SALT, chunk_plaintext_sha256 || tenant_pepper)
+pub fn derive_chunk_convergent_key(
+    chunk_plaintext_sha256: &Hash256,
+    tenant_pepper: &[u8; 32],
+) -> [u8; 32] {
+    let mut ikm = Vec::with_capacity(64);
+    ikm.extend_from_slice(chunk_plaintext_sha256.as_bytes());
+    ikm.extend_from_slice(tenant_pepper);
+
+    let (prk, _) = Hkdf::<Sha256>::extract(Some(CONTENT_KEY_SALT), &ikm);
+    ikm.zeroize();
+    let mut arr = [0u8; 32];
+    arr.copy_from_slice(prk.as_slice());
+    arr
+}
+
+/// Derives a convergent per-chunk nonce from the chunk's plaintext hash
+/// and the tenant pepper.
+///
+/// ChunkNonce = HKDF-Expand(ChunkKey, "kchat-drive/chunk-content-nonce/v1" || u64be(0), 12)
+pub fn derive_chunk_convergent_nonce(
+    chunk_key: &[u8; 32],
+) -> Result<[u8; 12], DriveError> {
+    let mut info = Vec::with_capacity(80);
+    info.extend_from_slice(CONTENT_CHUNK_NONCE_INFO.as_bytes());
+    info.extend_from_slice(&0u64.to_be_bytes()); // chunk_index=0 for convergent
+
+    let hkdf = Hkdf::<Sha256>::from_prk(chunk_key.as_slice())
+        .map_err(|e| DriveError::Crypto(format!("HKDF init failed: {}", e)))?;
+    let mut okm = [0u8; 12];
+    hkdf.expand(&info, &mut okm)
+        .map_err(|e| DriveError::Crypto(format!("HKDF expand failed: {}", e)))?;
+    Ok(okm)
+}
+
+/// Computes a per-chunk content_id = HMAC-SHA256(tenant_pepper, chunk_plaintext_sha256).
+/// This is used as the AAD for convergent chunk encryption, enabling dedup.
+#[must_use]
+pub fn compute_chunk_content_id(
+    chunk_plaintext_sha256: &Hash256,
+    tenant_pepper: &[u8; 32],
+) -> Hash256 {
+    use sha2::digest::Mac;
+    type HmacSha256 = hmac::Hmac<Sha256>;
+
+    let mut mac = HmacSha256::new_from_slice(tenant_pepper).expect("32-byte key is valid for HMAC");
+    mac.update(chunk_plaintext_sha256.as_bytes());
+    let result = mac.finalize();
+    Hash256::from_slice(&result.into_bytes())
+}
+
 /// Derives the content-wrap key from VersionDEK + version_id:
 /// WrapKey = HKDF-Expand(PRK, "kchat-drive/content-wrap-key/v1" || version_id, 32)
 /// where PRK = HKDF-Extract(version_salt, VersionDEK) (same as KDRV1).

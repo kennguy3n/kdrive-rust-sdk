@@ -77,7 +77,7 @@ fn content_file_encrypt_decrypt_roundtrip() {
         encrypt_content_file(&plaintext, &pepper).unwrap();
 
     let decrypted =
-        decrypt_content_file(&content_key, &content_id, &chunk_plan, &ciphertexts).unwrap();
+        decrypt_content_file(&content_key, &content_id, &chunk_plan, &ciphertexts, &pepper).unwrap();
 
     assert_eq!(decrypted, plaintext);
 }
@@ -267,7 +267,7 @@ fn content_file_tamper_detection() {
     tampered_cts[0][mid] ^= 0x01;
 
     // Attempt to decrypt the full file — should fail
-    let result = decrypt_content_file(&content_key, &content_id, &plan, &tampered_cts);
+    let result = decrypt_content_file(&content_key, &content_id, &plan, &tampered_cts, &pepper);
     assert!(result.is_err(), "tampered file should fail to decrypt");
 }
 
@@ -301,14 +301,14 @@ fn merkle_root_two_chunks() {
             plaintext_len: 100,
             ciphertext_len: 116,
             ciphertext_sha256: Hash256::new([0xAA; 32]),
-            blob_key: "key-0".into(),
+            blob_key: "key-0".into(), plaintext_sha256: None,
         },
         ChunkDescriptor {
             index: 1,
             plaintext_len: 100,
             ciphertext_len: 116,
             ciphertext_sha256: Hash256::new([0xBB; 32]),
-            blob_key: "key-1".into(),
+            blob_key: "key-1".into(), plaintext_sha256: None,
         },
     ];
     let plan = ChunkPlan { chunks };
@@ -331,21 +331,21 @@ fn merkle_root_three_chunks_odd() {
             plaintext_len: 100,
             ciphertext_len: 116,
             ciphertext_sha256: Hash256::new([0xA1; 32]),
-            blob_key: "key-0".into(),
+            blob_key: "key-0".into(), plaintext_sha256: None,
         },
         ChunkDescriptor {
             index: 1,
             plaintext_len: 100,
             ciphertext_len: 116,
             ciphertext_sha256: Hash256::new([0xA2; 32]),
-            blob_key: "key-1".into(),
+            blob_key: "key-1".into(), plaintext_sha256: None,
         },
         ChunkDescriptor {
             index: 2,
             plaintext_len: 50,
             ciphertext_len: 66,
             ciphertext_sha256: Hash256::new([0xA3; 32]),
-            blob_key: "key-2".into(),
+            blob_key: "key-2".into(), plaintext_sha256: None,
         },
     ];
     let plan = ChunkPlan { chunks };
@@ -367,7 +367,7 @@ fn merkle_root_five_chunks_odd() {
             plaintext_len: 100,
             ciphertext_len: 116,
             ciphertext_sha256: Hash256::new([(i as u8 + 1); 32]),
-            blob_key: format!("key-{}", i),
+            blob_key: format!("key-{}", i), plaintext_sha256: None,
         })
         .collect();
     let plan = ChunkPlan { chunks };
@@ -389,7 +389,7 @@ fn merkle_root_seven_chunks_odd() {
             plaintext_len: 100,
             ciphertext_len: 116,
             ciphertext_sha256: Hash256::new([(i as u8 + 10); 32]),
-            blob_key: format!("key-{}", i),
+            blob_key: format!("key-{}", i), plaintext_sha256: None,
         })
         .collect();
     let plan = ChunkPlan { chunks };
@@ -410,7 +410,7 @@ fn merkle_root_single_chunk() {
         plaintext_len: 100,
         ciphertext_len: 116,
         ciphertext_sha256: Hash256::new([0xFF; 32]),
-        blob_key: "key-0".into(),
+        blob_key: "key-0".into(), plaintext_sha256: None,
     }];
     let plan = ChunkPlan { chunks };
 

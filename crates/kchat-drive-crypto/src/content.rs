@@ -12,7 +12,8 @@ use zeroize::Zeroize;
 use kchat_drive_types::{ChunkDescriptor, ChunkPlan, DriveError, Hash256};
 
 use crate::kdf::{
-    PROTOCOL_KDRV1, SUITE_KDRV1, chunk_count, compute_content_id, derive_content_chunk_key,
+    PROTOCOL_KDRV1, SUITE_KDRV1, chunk_count, compute_chunk_content_id, compute_content_id,
+    derive_chunk_convergent_key, derive_chunk_convergent_nonce, derive_content_chunk_key,
     derive_content_chunk_nonce, derive_content_key, derive_content_wrap_key,
     derive_content_wrap_nonce, select_chunk_size,
 };
@@ -157,11 +158,19 @@ pub fn encrypt_content_file(
         let chunk_plaintext = &plaintext[start..end];
         let plaintext_len = chunk_plaintext.len() as u64;
 
-        // Build AAD into reusable buffer to avoid per-chunk allocation.
-        build_content_chunk_aad_into(&mut aad_buf, &content_id, i, plaintext_len);
+        // Convergent chunk encryption: derive key from the chunk's own plaintext
+        // hash + tenant_pepper, so identical plaintext chunks produce identical
+        // ciphertexts regardless of which file they belong to. This enables
+        // real chunk-level dedup across file versions.
+        let chunk_pt_hash = Hash256::from_slice(&Sha256::digest(chunk_plaintext));
+        let chunk_key = derive_chunk_convergent_key(&chunk_pt_hash, tenant_pepper);
+        let chunk_content_id = compute_chunk_content_id(&chunk_pt_hash, tenant_pepper);
 
-        let key_bytes = derive_content_chunk_key(&content_key, i)?;
-        let nonce_bytes = derive_content_chunk_nonce(&content_key, i)?;
+        let key_bytes = chunk_key;
+        let nonce_bytes = derive_chunk_convergent_nonce(&chunk_key)?;
+
+        // Build AAD using the per-chunk content_id (not the file-level content_id)
+        build_content_chunk_aad_into(&mut aad_buf, &chunk_content_id, 0, plaintext_len);
 
         let cipher =
             Aes256Gcm::new_from_slice(&key_bytes).map_err(|e| DriveError::Crypto(e.to_string()))?;
@@ -186,6 +195,7 @@ pub fn encrypt_content_file(
             ciphertext_len: ct.len() as u64,
             ciphertext_sha256: ct_hash,
             blob_key,
+            plaintext_sha256: Some(chunk_pt_hash),
         });
         ciphertexts.push(ct);
     }
@@ -194,11 +204,14 @@ pub fn encrypt_content_file(
 }
 
 /// Decrypts a file from content-layer chunks (KDRV1).
+/// Uses convergent per-chunk keys when plaintext_sha256 is available in the
+/// chunk plan; falls back to file-level content_key for legacy chunks.
 pub fn decrypt_content_file(
     content_key: &[u8; 32],
     content_id: &Hash256,
     chunk_plan: &ChunkPlan,
     ciphertexts: &[Vec<u8>],
+    tenant_pepper: &[u8; 32],
 ) -> Result<Vec<u8>, DriveError> {
     if ciphertexts.len() != chunk_plan.chunks.len() {
         return Err(DriveError::InvalidState(format!(
@@ -219,26 +232,51 @@ pub fn decrypt_content_file(
     let mut aad_buf = Vec::with_capacity(48);
     for (i, ct) in ciphertexts.iter().enumerate() {
         let desc = &chunk_plan.chunks[i];
-        // Build AAD into reusable buffer to avoid per-chunk allocation.
-        build_content_chunk_aad_into(&mut aad_buf, content_id, desc.index, desc.plaintext_len);
 
-        let key_bytes = derive_content_chunk_key(content_key, desc.index)?;
-        let nonce_bytes = derive_content_chunk_nonce(content_key, desc.index)?;
+        if let Some(ref chunk_pt_hash) = desc.plaintext_sha256 {
+            // Convergent mode: derive key from chunk plaintext hash + pepper
+            let chunk_key = derive_chunk_convergent_key(chunk_pt_hash, tenant_pepper);
+            let chunk_content_id = compute_chunk_content_id(chunk_pt_hash, tenant_pepper);
+            let nonce_bytes = derive_chunk_convergent_nonce(&chunk_key)?;
 
-        let cipher =
-            Aes256Gcm::new_from_slice(&key_bytes).map_err(|e| DriveError::Crypto(e.to_string()))?;
-        let nonce = Nonce::from_slice(&nonce_bytes);
+            build_content_chunk_aad_into(&mut aad_buf, &chunk_content_id, 0, desc.plaintext_len);
 
-        let pt = cipher
-            .decrypt(
-                nonce,
-                Payload {
-                    msg: ct,
-                    aad: &aad_buf,
-                },
-            )
-            .map_err(|e| DriveError::Crypto(e.to_string()))?;
-        plaintext.extend_from_slice(&pt);
+            let cipher = Aes256Gcm::new_from_slice(&chunk_key)
+                .map_err(|e| DriveError::Crypto(e.to_string()))?;
+            let nonce = Nonce::from_slice(&nonce_bytes);
+
+            let pt = cipher
+                .decrypt(
+                    nonce,
+                    Payload {
+                        msg: ct,
+                        aad: &aad_buf,
+                    },
+                )
+                .map_err(|e| DriveError::Crypto(e.to_string()))?;
+            plaintext.extend_from_slice(&pt);
+        } else {
+            // Legacy mode: derive key from file-level content_key + chunk index
+            build_content_chunk_aad_into(&mut aad_buf, content_id, desc.index, desc.plaintext_len);
+
+            let key_bytes = derive_content_chunk_key(content_key, desc.index)?;
+            let nonce_bytes = derive_content_chunk_nonce(content_key, desc.index)?;
+
+            let cipher = Aes256Gcm::new_from_slice(&key_bytes)
+                .map_err(|e| DriveError::Crypto(e.to_string()))?;
+            let nonce = Nonce::from_slice(&nonce_bytes);
+
+            let pt = cipher
+                .decrypt(
+                    nonce,
+                    Payload {
+                        msg: ct,
+                        aad: &aad_buf,
+                    },
+                )
+                .map_err(|e| DriveError::Crypto(e.to_string()))?;
+            plaintext.extend_from_slice(&pt);
+        }
     }
 
     Ok(plaintext)

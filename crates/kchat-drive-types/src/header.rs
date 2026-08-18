@@ -136,6 +136,11 @@ pub struct ChunkDescriptor {
     /// Blob key in the BlobStore (opaque).
     #[n(4)]
     pub blob_key: String,
+
+    /// SHA-256 of the plaintext (for convergent chunk dedup key derivation).
+    /// None for legacy chunks; Some for KDRV1 convergent chunks.
+    #[n(5)]
+    pub plaintext_sha256: Option<Hash256>,
 }
 
 /// Chunk plan: the full list of chunk descriptors for a version.
