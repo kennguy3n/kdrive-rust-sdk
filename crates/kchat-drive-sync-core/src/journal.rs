@@ -84,8 +84,8 @@ impl OperationJournal {
             status: OperationStatus::Pending,
             node_id,
             version_id,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            timestamp: web_time::SystemTime::now()
+                .duration_since(web_time::SystemTime::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
             error: None,

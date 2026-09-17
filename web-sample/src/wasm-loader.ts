@@ -8,6 +8,8 @@
 // restored across page reloads.
 
 // The WASM module exports both functions (WasmExports) and classes.
+import { listKeys, loadKey } from "./vault";
+
 type WasmModule = WasmExports & {
   WasmDriveRuntime: typeof WasmDriveRuntime;
   DedupCallbacks: typeof DedupCallbacks;
@@ -17,6 +19,7 @@ let wasm: WasmModule | null = null;
 let runtime: WasmDriveRuntime | null = null;
 
 const MASTER_KEY_IDB_KEY = "kchat_drive_master_key";
+const PEPPER_IDB_PREFIX = "tenant_pepper_";
 
 export async function loadWasm(): Promise<WasmModule> {
   if (wasm) return wasm;
@@ -50,6 +53,19 @@ export async function getRuntime(): Promise<WasmDriveRuntime> {
     runtime = new wasmModule.WasmDriveRuntime();
     const masterKey = runtime.exportMasterKey();
     await storeMasterKey(masterKey);
+  }
+
+  // Restore persisted tenant peppers into the fresh in-memory vault so
+  // convergent-encryption content IDs (and therefore dedup) survive reloads.
+  for (const id of await listKeys()) {
+    if (!id.startsWith(PEPPER_IDB_PREFIX)) continue;
+    const pepperHex = await loadKey(id);
+    if (!pepperHex) continue;
+    try {
+      runtime.storeTenantPepper(id.slice(PEPPER_IDB_PREFIX.length), pepperHex);
+    } catch {
+      // skip malformed entries
+    }
   }
 
   return runtime;

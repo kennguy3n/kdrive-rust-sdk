@@ -34,16 +34,16 @@ pub fn enroll_user(
         device_id,
         device_public_key: device_keypair.public_key().clone(),
         device_name,
-        enrolled_at: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        enrolled_at: web_time::SystemTime::now()
+            .duration_since(web_time::SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs(),
         active: true,
     };
 
     // Create account authority record.
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let now = web_time::SystemTime::now()
+        .duration_since(web_time::SystemTime::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
 
@@ -76,8 +76,8 @@ pub fn add_device(
     let device_id = DeviceId::random();
     let device_keypair = DeviceKeyPair::generate(device_id.clone());
 
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let now = web_time::SystemTime::now()
+        .duration_since(web_time::SystemTime::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
 
@@ -103,8 +103,8 @@ pub fn remove_device(
     root_signing_key: &SigningKey,
     device_id: &DeviceId,
 ) -> Result<AccountAuthorityRecord, DriveError> {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let now = web_time::SystemTime::now()
+        .duration_since(web_time::SystemTime::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
 

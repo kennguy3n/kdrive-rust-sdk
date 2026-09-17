@@ -15,3 +15,4 @@ kchat-drive-types = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 minicbor = { workspace = true, features = ["derive", "alloc"] }
+web-time = { workspace = true }

@@ -386,7 +386,10 @@ export class WasmDriveRuntime {
         const ptr0 = passStringToWasm0(master_key_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.wasmdriveruntime_withMasterKey(ptr0, len0);
-        return WasmDriveRuntime.__wrap(ret);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return WasmDriveRuntime.__wrap(ret[0]);
     }
     /**
      * Wraps the tenant pepper under a DomainKey (Secured/Advanced mode).
@@ -615,11 +618,10 @@ export function decrypt_manifest_wasm(version_dek_hex, node_id_hex, version_id_h
  * @param {bigint} access_context_revision
  * @param {string} access_context_snapshot_hash_hex
  * @param {string} wrapping_key_hex
- * @param {bigint} created_at
  * @param {DedupCallbacks} callbacks
  * @returns {string}
  */
-export function dedup_upload(runtime, tenant_id_hex, drive_id_hex, node_id_hex, domain_id_hex, privacy_mode, plaintext_hex, creator_device_key_hex, signing_key_hex, access_context_revision, access_context_snapshot_hash_hex, wrapping_key_hex, created_at, callbacks) {
+export function dedup_upload(runtime, tenant_id_hex, drive_id_hex, node_id_hex, domain_id_hex, privacy_mode, plaintext_hex, creator_device_key_hex, signing_key_hex, access_context_revision, access_context_snapshot_hash_hex, wrapping_key_hex, callbacks) {
     let deferred11_0;
     let deferred11_1;
     try {
@@ -643,7 +645,7 @@ export function dedup_upload(runtime, tenant_id_hex, drive_id_hex, node_id_hex, 
         const ptr8 = passStringToWasm0(wrapping_key_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len8 = WASM_VECTOR_LEN;
         _assertClass(callbacks, DedupCallbacks);
-        const ret = wasm.dedup_upload(runtime.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, privacy_mode, ptr4, len4, ptr5, len5, ptr6, len6, access_context_revision, ptr7, len7, ptr8, len8, created_at, callbacks.__wbg_ptr);
+        const ret = wasm.dedup_upload(runtime.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, privacy_mode, ptr4, len4, ptr5, len5, ptr6, len6, access_context_revision, ptr7, len7, ptr8, len8, callbacks.__wbg_ptr);
         var ptr10 = ret[0];
         var len10 = ret[1];
         if (ret[3]) {
@@ -1096,12 +1098,28 @@ function __wbg_get_imports() {
             const ret = new Error();
             return ret;
         },
+        __wbg_new_da52cf8fe3429cb2: function() {
+            const ret = new Object();
+            return ret;
+        },
         __wbg_new_with_length_e6785c33c8e4cce8: function(arg0) {
             const ret = new Uint8Array(arg0 >>> 0);
             return ret;
         },
         __wbg_node_84ea875411254db1: function(arg0) {
             const ret = arg0.node;
+            return ret;
+        },
+        __wbg_now_86c0d4ba3fa605b8: function() {
+            const ret = Date.now();
+            return ret;
+        },
+        __wbg_now_e7c6795a7f81e10f: function(arg0) {
+            const ret = arg0.now();
+            return ret;
+        },
+        __wbg_performance_3fcf6e32a7e1ed0a: function(arg0) {
+            const ret = arg0.performance;
             return ret;
         },
         __wbg_process_44c7a14e11e9f69e: function(arg0) {
@@ -1116,6 +1134,10 @@ function __wbg_get_imports() {
         }, arguments); },
         __wbg_require_b4edbdcf3e2a1ef0: function() { return handleError(function () {
             const ret = module.require;
+            return ret;
+        }, arguments); },
+        __wbg_set_8535240470bf2500: function() { return handleError(function (arg0, arg1, arg2) {
+            const ret = Reflect.set(arg0, arg1, arg2);
             return ret;
         }, arguments); },
         __wbg_stack_3b0d974bbf31e44f: function(arg0, arg1) {

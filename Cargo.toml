@@ -80,6 +80,7 @@ wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = ["IdbDatabase", "IdbObjectStore", "IdbTransaction", "IdbRequest", "IdbOpenDbRequest", "IdbFactory", "IdbKeyRange", "IdbCursor", "IdbCursorWithValue", "Window", "Request", "RequestInit", "Response", "Headers", "ReadableStream", "WorkerGlobalScope"] }
 js-sys = "0.3"
 getrandom = { version = "0.2", features = ["js"] }
+web-time = "1"
 
 # Bindings
 uniffi = { version = "0.31", features = ["cli", "tokio"] }

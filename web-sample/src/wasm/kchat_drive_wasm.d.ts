@@ -187,7 +187,7 @@ export function decrypt_manifest_wasm(version_dek_hex: string, node_id_hex: stri
  * if (parsed.fully_deduped) { showBadge("DEDUPED"); }
  * ```
  */
-export function dedup_upload(runtime: WasmDriveRuntime, tenant_id_hex: string, drive_id_hex: string, node_id_hex: string, domain_id_hex: string, privacy_mode: number, plaintext_hex: string, creator_device_key_hex: string, signing_key_hex: string, access_context_revision: bigint, access_context_snapshot_hash_hex: string, wrapping_key_hex: string, created_at: bigint, callbacks: DedupCallbacks): string;
+export function dedup_upload(runtime: WasmDriveRuntime, tenant_id_hex: string, drive_id_hex: string, node_id_hex: string, domain_id_hex: string, privacy_mode: number, plaintext_hex: string, creator_device_key_hex: string, signing_key_hex: string, access_context_revision: bigint, access_context_snapshot_hash_hex: string, wrapping_key_hex: string, callbacks: DedupCallbacks): string;
 
 export function encrypt_content_file(tenant_pepper_hex: string, plaintext_hex: string): any;
 
@@ -262,7 +262,7 @@ export interface InitOutput {
     readonly wrap_dek_under_domain_key: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly wrap_dek_under_share_grant_key: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly __wbg_dedupcallbacks_free: (a: number, b: number) => void;
-    readonly dedup_upload: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: bigint, r: number, s: number, t: number, u: number, v: bigint, w: number) => [number, number, number, number];
+    readonly dedup_upload: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: bigint, r: number, s: number, t: number, u: number, v: number) => [number, number, number, number];
     readonly dedupcallbacks_new: (a: any, b: any, c: any, d: any) => number;
     readonly __wbg_wasmdriveruntime_free: (a: number, b: number) => void;
     readonly wasmdriveruntime_createDomain: (a: number, b: number, c: number) => [number, number, number, number];
@@ -276,13 +276,13 @@ export interface InitOutput {
     readonly wasmdriveruntime_sealPepperForMls: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: bigint, k: bigint, l: number, m: number, n: number, o: number) => [number, number, number, number];
     readonly wasmdriveruntime_storeTenantPepper: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly wasmdriveruntime_unwrapPepperFromDomainKey: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
-    readonly wasmdriveruntime_withMasterKey: (a: number, b: number) => number;
+    readonly wasmdriveruntime_withMasterKey: (a: number, b: number) => [number, number, number];
     readonly wasmdriveruntime_wrapPepperUnderDomainKey: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
+    readonly init_panic_hook: () => void;
     readonly generate_ed25519_keypair: () => [number, number, number];
     readonly generate_hpke_keypair: () => [number, number, number];
     readonly random_id_hex: () => [number, number];
     readonly sha256_hex: (a: number, b: number) => [number, number];
-    readonly init_panic_hook: () => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;

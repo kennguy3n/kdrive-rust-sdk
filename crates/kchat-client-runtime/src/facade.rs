@@ -122,8 +122,8 @@ impl DriveFacade {
             name_ciphertext: vec![], // Demo: no name encryption in this path
             mime_type: None,
             plaintext_size: plaintext.len() as u64,
-            created_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            created_at: web_time::SystemTime::now()
+                .duration_since(web_time::SystemTime::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
             parent_version_id: None,
@@ -164,8 +164,8 @@ impl DriveFacade {
             access_context_revision,
             access_context_snapshot_hash: Hash256::new(*access_context_snapshot_hash),
             creator_device_key: creator_device_key.clone(),
-            created_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            created_at: web_time::SystemTime::now()
+                .duration_since(web_time::SystemTime::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
             signature: None,
@@ -373,8 +373,8 @@ impl DriveFacade {
             name_ciphertext: vec![],
             mime_type: None,
             plaintext_size: plaintext.len() as u64,
-            created_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            created_at: web_time::SystemTime::now()
+                .duration_since(web_time::SystemTime::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
             parent_version_id: None,
@@ -407,8 +407,8 @@ impl DriveFacade {
             access_context_revision,
             access_context_snapshot_hash: Hash256::new(*access_context_snapshot_hash),
             creator_device_key: creator_device_key.clone(),
-            created_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            created_at: web_time::SystemTime::now()
+                .duration_since(web_time::SystemTime::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
             signature: None,

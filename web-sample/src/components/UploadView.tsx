@@ -54,10 +54,9 @@ export function UploadView({ userId, tenantId }: Props) {
   useEffect(() => {
     (async () => {
       const runtime = await getRuntime();
-      const tenantIdHex = tenantIdToHex(tenantId);
-      if (!runtime.hasTenantPepper(tenantIdHex)) {
-        runtime.ensureTenantPepper(tenantIdHex);
-      }
+      const tenantIdHex = await tenantIdToHex(tenantId);
+      const pepperHex = runtime.ensureTenantPepper(tenantIdHex);
+      await storeKey(`tenant_pepper_${tenantIdHex}`, pepperHex);
     })().catch(() => {});
   }, [tenantId]);
 
@@ -124,14 +123,16 @@ export function UploadView({ userId, tenantId }: Props) {
       const runtime = await getRuntime();
       const plaintext = new TextEncoder().encode(text);
       const ptHex = Array.from(plaintext).map(b => b.toString(16).padStart(2, "0")).join("");
-      const tenantIdHex = tenantIdToHex(tenantId);
+      const tenantIdHex = await tenantIdToHex(tenantId);
 
       addLog(`File size: ${plaintext.length} bytes (${(plaintext.length / 1024 / 1024).toFixed(2)} MiB)`);
       const expectedChunks = Math.ceil(plaintext.length / CHUNK_SIZE);
       addLog(`Expected chunks: ${expectedChunks} (chunk size = 4 MiB)`);
 
       // Ensure pepper exists in SDK vault (auto-creates on first call)
-      runtime.ensureTenantPepper(tenantIdHex);
+      // and persist it so dedup survives page reloads.
+      const pepperHex = runtime.ensureTenantPepper(tenantIdHex);
+      await storeKey(`tenant_pepper_${tenantIdHex}`, pepperHex);
 
       // Generate demo key material
       const driveIdHex = wasm.random_id_hex();
@@ -197,6 +198,18 @@ export function UploadView({ userId, tenantId }: Props) {
         if (xhr.status !== 200) {
           return JSON.stringify({ results: [] });
         }
+        // Remember hash ↔ blob_key for reused chunks so content:register
+        // stores real ciphertext hashes instead of blob keys.
+        try {
+          const resp = JSON.parse(xhr.responseText);
+          (resp.results || []).forEach((r: { blob_key?: string }, i: number) => {
+            if (r.blob_key) {
+              blobHashes[r.blob_key] = req.chunk_hashes[i];
+            }
+          });
+        } catch {
+          // best effort — non-JSON responses just skip hash tracking
+        }
         return xhr.responseText;
       };
 
@@ -206,6 +219,23 @@ export function UploadView({ userId, tenantId }: Props) {
         const ctBytes = new Uint8Array(req.ciphertext_hex.match(/.{2}/g).map((h: string) => parseInt(h, 16)));
         const hashHex = wasm.sha256_hex(ctBytes);
         blobHashes[req.blob_key] = hashHex;
+
+        // Persist ciphertext to the gateway blob store so the content is
+        // actually retrievable — commitDedup verifies new blob keys exist.
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/v1/blobs:upload", false);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.setRequestHeader("X-Demo-Tenant", tenantId);
+        xhr.send(JSON.stringify({
+          blob_key: req.blob_key,
+          ciphertext_hex: req.ciphertext_hex,
+          ciphertext_sha256: hashHex,
+          plaintext_len: plaintext.length,
+          ciphertext_len: ctBytes.length,
+        }));
+        if (xhr.status !== 200) {
+          throw new Error(`blob upload failed (${xhr.status}): ${xhr.responseText}`);
+        }
         return "";
       };
 
@@ -218,7 +248,7 @@ export function UploadView({ userId, tenantId }: Props) {
         const allBlobHashes = req.all_blob_hashes || [];
         const chunks = allBlobKeys.map((blobKey: string, i: number) => ({
           chunk_index: i,
-          chunk_content_hash: allBlobHashes[i] || blobKey,
+          chunk_content_hash: allBlobHashes[i] || blobHashes[blobKey] || blobKey,
           blob_key: blobKey,
           plaintext_len: plaintext.length,
           ciphertext_len: 0,
@@ -453,20 +483,10 @@ export function UploadView({ userId, tenantId }: Props) {
 }
 
 /// Converts a tenant string ID (e.g. "tenant_acme") to a 16-byte hex ID
-/// that the SDK can use. Uses SHA-256 and takes the first 16 bytes.
-function tenantIdToHex(tenantId: string): string {
-  // Simple deterministic hash — for production, the tenant ID would be
-  // a proper UUID assigned by the identity service.
-  let hash = 0;
-  for (let i = 0; i < tenantId.length; i++) {
-    hash = ((hash << 5) - hash + tenantId.charCodeAt(i)) | 0;
-  }
-  // Expand to 32 hex chars (16 bytes) using a simple PRNG seeded by hash
-  const bytes: string[] = [];
-  let state = Math.abs(hash) || 1;
-  for (let i = 0; i < 16; i++) {
-    state = (state * 1103515245 + 12345) & 0x7fffffff;
-    bytes.push((state & 0xff).toString(16).padStart(2, "0"));
-  }
-  return bytes.join("");
+/// that the SDK can use: first 16 bytes of SHA-256(tenantId). Deterministic
+/// and collision-resistant; in production the tenant ID would be a real
+/// UUID assigned by the identity service.
+async function tenantIdToHex(tenantId: string): Promise<string> {
+  const wasm = await loadWasm();
+  return wasm.sha256_hex(new TextEncoder().encode(tenantId)).slice(0, 32);
 }

@@ -31,8 +31,8 @@ pub fn retry_delay(config: &RetryConfig, attempt: u32) -> Duration {
     let jitter = {
         // Use SystemTime nanos as a jitter source to avoid relying on
         // `rand::random`, which may not be available in WASM targets.
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let nanos = web_time::SystemTime::now()
+            .duration_since(web_time::SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
             .subsec_nanos() as u64;
         (nanos % (jitter_range * 2 + 1)).saturating_sub(jitter_range)
@@ -111,7 +111,7 @@ async fn async_sleep(duration: Duration) {
     use wasm_bindgen_futures::JsFuture;
 
     let ms = duration.as_millis() as i32;
-    let promise = js_sys::Promise::new(|resolve, _| {
+    let promise = js_sys::Promise::new(&mut |resolve, _| {
         let global = js_sys::global();
         // In the main thread, `global` is a `Window`; in a Web Worker, it is
         // a `WorkerGlobalScope`. Both expose `setTimeout`.

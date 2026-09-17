@@ -21,7 +21,7 @@ pub struct DriveKeyVault {
 struct VaultEntry {
     ciphertext: Vec<u8>,
     nonce: [u8; 12],
-    last_used: std::time::Instant,
+    last_used: web_time::Instant,
 }
 
 impl zeroize::Zeroize for VaultEntry {
@@ -87,7 +87,7 @@ impl DriveKeyVault {
             VaultEntry {
                 ciphertext: ct,
                 nonce: nonce_bytes,
-                last_used: std::time::Instant::now(),
+                last_used: web_time::Instant::now(),
             },
         );
         self.remove_stale(10000);
@@ -104,7 +104,7 @@ impl DriveKeyVault {
                 key_id
             )))?;
 
-        entry.last_used = std::time::Instant::now();
+        entry.last_used = web_time::Instant::now();
 
         let cipher = Aes256Gcm::new_from_slice(&self.master_key)
             .map_err(|e| DriveError::Crypto(e.to_string()))?;
@@ -155,7 +155,7 @@ impl DriveKeyVault {
             VaultEntry {
                 ciphertext: ct,
                 nonce: nonce_bytes,
-                last_used: std::time::Instant::now(),
+                last_used: web_time::Instant::now(),
             },
         );
         Ok(())
@@ -171,7 +171,7 @@ impl DriveKeyVault {
                 key_id
             )))?;
 
-        entry.last_used = std::time::Instant::now();
+        entry.last_used = web_time::Instant::now();
 
         let cipher = Aes256Gcm::new_from_slice(&self.master_key)
             .map_err(|e| DriveError::Crypto(e.to_string()))?;
@@ -267,7 +267,7 @@ impl DriveKeyVault {
                 VaultEntry {
                     ciphertext: entry.ciphertext.clone(),
                     nonce: entry.nonce,
-                    last_used: std::time::Instant::now(),
+                    last_used: web_time::Instant::now(),
                 },
             );
         }
